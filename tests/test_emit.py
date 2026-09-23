@@ -124,3 +124,55 @@ class TestDocument:
         tex = build([para("Body.")], [Role.BODY])
         assert "paperwidth=612.0bp" in tex
         assert "paperheight=792.0bp" in tex
+
+
+class TestCheck:
+    def test_a_clean_run_reports_clean(self, tmp_path):
+        from translatex.check import check
+
+        paper = tmp_path / "Some_Paper"
+        work = paper / ".translatex"
+        work.mkdir(parents=True)
+        (work / "tracking.json").write_text(
+            '[{"index": 0, "role": "body", "source": "gain k set",'
+            ' "masked": "gain {v1} set", "translated": "усиление k задано",'
+            ' "pieces": ["k"]}]',
+            encoding="utf-8",
+        )
+        (work / "tectonic.log").write_text("warning: Underfull hbox\n", encoding="utf-8")
+
+        report = check(paper)
+        assert report.paragraphs == 1
+        assert report.expressions_kept == 1
+        assert report.untranslated == 0
+        assert report.missing_characters == 0
+
+    def test_a_dropped_expression_is_named(self, tmp_path):
+        from translatex.check import check
+
+        paper = tmp_path / "Some_Paper"
+        work = paper / ".translatex"
+        work.mkdir(parents=True)
+        (work / "tracking.json").write_text(
+            '[{"index": 0, "role": "body", "source": "gain k set",'
+            ' "masked": "gain {v1} set", "translated": "усиление задано",'
+            ' "pieces": ["k_a"]}]',
+            encoding="utf-8",
+        )
+        report = check(paper)
+        assert report.expressions_kept == 0
+        assert report.lost == ["k_a"]
+        assert not report.ok
+
+    def test_a_paragraph_handed_back_in_english_is_counted(self, tmp_path):
+        from translatex.check import check
+
+        paper = tmp_path / "Some_Paper"
+        work = paper / ".translatex"
+        work.mkdir(parents=True)
+        (work / "tracking.json").write_text(
+            '[{"index": 0, "role": "body", "source": "gain k set",'
+            ' "masked": "gain k set", "translated": "gain k set", "pieces": []}]',
+            encoding="utf-8",
+        )
+        assert check(paper).untranslated == 1

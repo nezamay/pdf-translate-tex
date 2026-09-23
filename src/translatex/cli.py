@@ -15,6 +15,7 @@ import pymupdf
 from translatex.glyphs import decide_fonts
 from translatex.pdfin import read_chars
 from translatex.pdfin import unreadable_runs
+from translatex.check import check
 from translatex.pipeline import run
 from translatex.workdir import ensure_paper_dir
 from translatex.workdir import work_dir
@@ -119,6 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="override the guess made from SOURCE",
     )
 
+    judge = commands.add_parser(
+        "check",
+        help="say whether a finished translation holds together",
+    )
+    judge.add_argument("paper", type=Path, help="the paper's directory")
+
     fonts = commands.add_parser(
         "fonts",
         help="report what the glyph pass makes of a PDF, without translating it",
@@ -127,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-COMMANDS = ("translate", "fonts")
+COMMANDS = ("translate", "fonts", "check")
 
 
 def with_default_command(argv: list[str]) -> list[str]:
@@ -146,6 +153,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "fonts":
         return report_fonts(args.pdf)
+    if args.command == "check":
+        report = check(args.paper)
+        print("\n".join(report.lines()))
+        return 0 if report.ok else 1
     if args.command == "translate":
         return translate(args)
     build_parser().print_help()
