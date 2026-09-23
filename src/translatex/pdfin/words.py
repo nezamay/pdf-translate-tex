@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from translatex.pdfin.chars import Char
 from translatex.pdfin.chars import Line
+from translatex.pdfin.chars import spell_out
 
 #: A line whose left edge sits this much further right than its neighbours starts a
 #: paragraph. Measured in fractions of the body size, so it survives a change of scale.
@@ -36,7 +37,7 @@ class Word:
 
     @property
     def text(self) -> str:
-        return "".join(c.text for c in self.chars)
+        return spell_out("".join(c.text for c in self.chars))
 
     @property
     def bbox(self) -> tuple[float, float, float, float]:

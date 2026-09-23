@@ -56,6 +56,21 @@ def _style(span: dict) -> tuple[bool, bool]:
     return style_from_name(span["font"])
 
 
+#: Typographic ligatures are one glyph but several letters. They have to be spelled out
+#: before anything reads the text: "Identiﬁer" does not match "identifier", and a
+#: translator handed "signiﬁcant" is being handed a word that is not in any dictionary.
+#: The character keeps its single box, because on the page it really is one mark.
+LIGATURES = str.maketrans({
+    "\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi", "\ufb04": "ffl",
+    "\ufb05": "st", "\ufb06": "st",
+})
+
+
+def spell_out(text: str) -> str:
+    """The same text with its ligatures written as the letters they stand for."""
+    return text.translate(LIGATURES)
+
+
 @dataclass(frozen=True)
 class Line:
     """One drawn line of text, as the page laid it out."""
@@ -67,7 +82,7 @@ class Line:
 
     @property
     def text(self) -> str:
-        return "".join(c.text for c in self.chars)
+        return spell_out("".join(c.text for c in self.chars))
 
     @property
     def bbox(self) -> tuple[float, float, float, float]:
