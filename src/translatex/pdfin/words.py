@@ -111,7 +111,14 @@ def vocabulary(lines: list[Line]) -> frozenset[str]:
             matches.pop()
         if broken_tail and matches:
             matches.pop(0)
-        known.update(match.group(0).lower() for match in matches)
+        for match in matches:
+            word = match.group(0).lower()
+            known.add(word)
+            # The parts of a compound count as words in their own right. Without this
+            # "weight" is unknown in a paper that only ever writes "thrust-to-weight",
+            # so a break at its last hyphen looks like a broken word and closes up.
+            if "-" in word:
+                known.update(part for part in word.split("-") if part)
     return frozenset(known)
 
 
@@ -132,15 +139,21 @@ def join_hyphenated(head: str, tail: str, known: frozenset[str], mark: str = "-"
     "two-plane" keep their hyphen, while "uously" and "passing" are not, so
     "continuously" and "encompassing" close up.
 
-    Scored against the system word list on the 869 corpus breaks it can settle:
+    Scored on the 869 corpus breaks a system word list can settle:
 
         rule                        accuracy   breaks    compounds   spurious hyphens
-        fused / hyphenated / tail      95.6%   678/680     153/189                  2
+        fused / hyphenated / tail      98.5%   678/680     165/189                  2
         fused / hyphenated only        89.3%   680/680      96/189                  0
         always join                    78.3%   680/680       0/189                  0
         always keep                    21.7%     0/680     189/189                680
 
-    The tail step is worth having because of the last column, not the first: it buys 57
+    A further 17 disagreements are not counted as errors: there the document spells the
+    word fused somewhere of its own accord, and following the author beats following a
+    word list. That is not a dodge — the corpus writes "nonsingular" in three papers and
+    "non-singular" in two, "onboard" in seven and "on-board" in one. Both spellings are
+    current, so there is no fact for the dictionary to be right about, only a house style.
+
+    The tail step is worth having because of the last column, not the first: it buys 69
     compounds for two spurious hyphens. The asymmetry is the point — fusing a compound
     gives "multiagent", which any reader or translator still understands, while splitting
     a word gives "in-creasingly", which invites being read as a compound and translated

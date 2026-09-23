@@ -101,3 +101,12 @@ class TestSoftHyphen:
     def test_a_soft_hyphen_break_is_healed_in_a_paragraph(self):
         lines = [line("a camera­", y=100, index=0), line("equipped thing", y=112, index=1)]
         assert paragraphs(lines)[0].text == "a cameraequipped thing"
+
+
+class TestCompoundParts:
+    def test_the_parts_of_a_compound_are_words_too(self):
+        # A paper that only ever writes "thrust-to-weight" still knows "weight", and a
+        # break at that last hyphen has to keep it rather than close the word up.
+        known = vocabulary([line("the thrust-to-weight ratio")])
+        assert {"thrust-to-weight", "thrust", "to", "weight"} <= known
+        assert join_hyphenated("thrust-to", "weight", known) == "thrust-to-weight"
