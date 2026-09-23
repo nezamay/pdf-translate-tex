@@ -96,6 +96,32 @@ def columns(lines: list[Line], page_width: float) -> list[tuple[float, float]]:
     return [band for band in bands if band[1] - band[0] >= smallest]
 
 
+def reading_order(
+    paragraphs: list[Paragraph], page_width: float, lines: list[Line]
+) -> list[Paragraph]:
+    """The paragraphs in the order a reader meets them: page, column, then down.
+
+    The order a PDF stores blocks in is not the order anyone reads them. On one page of
+    this corpus a prose paragraph at y=148 is stored before an equation at y=140, and the
+    pieces of one equation are scattered among paragraphs that belong to the text around
+    it. Every rule that says "the paragraph before this one" — a stray letter between two
+    equations, a run of equation blocks, a caption and the sentence set apart from it —
+    is about the page, not about the file, and needs the page's own order to work.
+    """
+    by_page: dict[int, list[Line]] = {}
+    for line in lines:
+        by_page.setdefault(line.page, []).append(line)
+
+    def where(paragraph: Paragraph) -> tuple[int, float, float]:
+        box = paragraph.lines[0].bbox
+        page = paragraph.lines[0].page
+        bands = columns(by_page.get(page, []), page_width)
+        band = _column_of(box, bands)
+        return (page, band[0] if band else box[0], box[1])
+
+    return sorted(paragraphs, key=where)
+
+
 def _column_of(box: tuple[float, float, float, float],
                bands: list[tuple[float, float]]) -> tuple[float, float] | None:
     """The band a box sits in, by the largest overlap."""

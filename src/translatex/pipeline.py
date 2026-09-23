@@ -33,6 +33,7 @@ from translatex.pdfin.crops import trim
 from translatex.pdfin.regions import columns
 from translatex.pdfin.regions import equation_regions
 from translatex.pdfin.regions import figure_regions
+from translatex.pdfin.regions import reading_order
 from translatex.pdfin.roles import Layout
 from translatex.pdfin.roles import Role
 from translatex.pdfin.roles import classify
@@ -123,6 +124,9 @@ def run(source: Path, *, language: str = "ru", claude: str = "claude",
     lines = read_lines(doc)
     pieces = paragraphs(lines)
     layout = Layout.measure(lines)
+    # Into the order a reader meets them before anything looks at what is next to what:
+    # the order a PDF stores blocks in is not the order of the page.
+    pieces = reading_order(pieces, doc[0].rect.width, lines)
     pieces, roles = merge(pieces, classify(pieces, layout))
 
     if pages is not None:
