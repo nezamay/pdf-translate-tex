@@ -5,6 +5,10 @@ from translatex.pdfin.chars import Line
 from translatex.pdfin.chars import read_chars
 from translatex.pdfin.chars import read_lines
 from translatex.pdfin.chars import unreadable_runs
+from translatex.pdfin.crops import Crop
+from translatex.pdfin.crops import glyph_crops
+from translatex.pdfin.crops import tighten
+from translatex.pdfin.crops import trim
 from translatex.pdfin.fonts import bare_name
 from translatex.pdfin.fonts import family
 from translatex.pdfin.fonts import style_from_name
@@ -15,15 +19,19 @@ from translatex.pdfin.words import split_words
 
 __all__ = [
     "Char",
+    "Crop",
     "Line",
     "Paragraph",
     "Word",
     "bare_name",
     "family",
+    "glyph_crops",
     "paragraphs",
     "read_chars",
     "read_lines",
     "split_words",
     "style_from_name",
+    "tighten",
+    "trim",
     "unreadable_runs",
 ]
