@@ -125,3 +125,13 @@ def test_a_figure_does_not_swallow_the_one_above_it(page_with_two_drawings):
     assert set(found) == {0, 1}
     assert found[0].rect[3] <= 160.0
     assert found[1].rect[1] >= 200.0
+
+
+def test_a_full_width_opening_does_not_hide_the_gutter():
+    # A title and an abstract set across the measure put several lines through the
+    # gutter. Measured against the busiest position, eight such lines cleared a 15%
+    # threshold by a hair and the whole opening page came out as one column -- which
+    # then put the first figure's search band in the wrong place as well.
+    lines = two_column_page(rows=40)
+    lines += [line(LEFT[0], RIGHT[1], y=40.0 + 12 * i, index=i) for i in range(8)]
+    assert len(columns(lines, PAGE_WIDTH)) == 2

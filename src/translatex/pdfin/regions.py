@@ -23,9 +23,9 @@ from translatex.pdfin.crops import ink_box
 from translatex.pdfin.roles import Role
 from translatex.pdfin.words import Paragraph
 
-#: A position covered by fewer than this share of the busiest position's lines is in a
-#: gutter, not in a column.
-GUTTER_DEPTH = 0.15
+#: A position carrying fewer than this share of what a column typically carries is in a
+#: gutter. Measured against the median rather than the maximum: see `columns`.
+GUTTER_DEPTH = 0.5
 
 #: A band narrower than this share of the page is a sidebar or a stamp, not a column.
 MIN_COLUMN_SHARE = 0.1
@@ -68,10 +68,16 @@ def columns(lines: list[Line], page_width: float) -> list[tuple[float, float]]:
         for x in range(left, right):
             cover[x] += 1
 
-    busiest = max(cover)
-    if not busiest:
+    covered = sorted(value for value in cover if value)
+    if not covered:
         return []
-    threshold = GUTTER_DEPTH * busiest
+    # Against the typical column, not against the busiest position. A page whose title
+    # and abstract run the full measure has eight lines crossing the gutter, which cleared
+    # a threshold set at a fraction of the maximum by a hair — and the whole opening page
+    # came out as one column. The gutter is a valley beside the columns either side of it,
+    # so the reference is what a column normally carries.
+    typical = covered[len(covered) // 2]
+    threshold = GUTTER_DEPTH * typical
 
     bands: list[tuple[float, float]] = []
     start = None

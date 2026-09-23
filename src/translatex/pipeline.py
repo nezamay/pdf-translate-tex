@@ -109,9 +109,30 @@ def equation_regions(doc, pieces: list[Paragraph], roles: list[Role]) -> dict[in
     return found
 
 
+def parse_pages(spec: str | None) -> set[int] | None:
+    """Which pages to work on, counted from one: "1", "1-3", "1,4-5", or None for all."""
+    if not spec:
+        return None
+    wanted: set[int] = set()
+    for part in spec.split(","):
+        piece = part.strip()
+        if "-" in piece:
+            first, last = piece.split("-", 1)
+            wanted.update(range(int(first) - 1, int(last)))
+        elif piece:
+            wanted.add(int(piece) - 1)
+    return wanted
+
+
 def run(source: Path, *, language: str = "ru", claude: str = "claude",
-        model: str = "sonnet", limit: int | None = None, build: bool = True) -> Result:
-    """Translate one paper and typeset it again."""
+        model: str = "sonnet", limit: int | None = None, build: bool = True,
+        pages: set[int] | None = None) -> Result:
+    """Translate one paper and typeset it again.
+
+    `pages` narrows the work to part of the paper, which is how a change is checked: a
+    whole paper takes half an hour and shows a hundred things at once, one page takes a
+    minute and shows whether the thing that was wrong is still wrong.
+    """
     started = time.time()
     name, babel, suffix = language_of(language)
     paper = ensure_paper_dir(source)
@@ -123,6 +144,12 @@ def run(source: Path, *, language: str = "ru", claude: str = "claude",
     pieces = paragraphs(lines)
     layout = Layout.measure(lines)
     pieces, roles = merge(pieces, classify(pieces, layout))
+
+    if pages is not None:
+        keep = [i for i, x in enumerate(pieces) if x.lines[0].page in pages]
+        pieces = [pieces[i] for i in keep]
+        roles = [roles[i] for i in keep]
+        lines = [line for line in lines if line.page in pages]
 
     figures = figure_regions(doc, lines, pieces, roles)
     equations = equation_regions(doc, pieces, roles)

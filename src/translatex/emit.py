@@ -230,13 +230,13 @@ def document(
             if crop is None:
                 body.append(r"\noindent\textit{%s}" % text)
             else:
+                # Not a float. multicol drops a `figure` silently — the picture simply
+                # never appears — and there is nothing to float towards anyway: the page
+                # is being rebuilt, so where the figure falls in the text is where the
+                # author put it.
                 body.append(
-                    "\\begin{figure}[htbp]\n\\centering\n%s\n\\caption*{%s}\n\\end{figure}"
-                    % (
-                        _picture(crop, trim_of(crop), source=source,
-                                 width=r"width=\linewidth"),
-                        text,
-                    )
+                    "\\begin{center}\n%s\n\\par\\smallskip\n\\textit{%s}\n\\end{center}"
+                    % (_fitted(crop, trim_of(crop), source), text)
                 )
         elif role is Role.EQUATION:
             # A display equation is shown, not transcribed: its fraction bars and matrix

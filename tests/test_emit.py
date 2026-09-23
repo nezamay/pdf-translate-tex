@@ -90,17 +90,19 @@ class TestDocument:
         assert "IEEE TRANSACTIONS" not in tex
         assert "Body text here." in tex
 
-    def test_a_caption_with_a_region_becomes_a_float(self):
+    def test_a_caption_with_a_region_places_its_picture(self):
         crop = Crop("figure_1_0", 0, (10.0, 20.0, 110.0, 120.0))
         tex = build([para("Fig. 1. A diagram.")], [Role.CAPTION], figures={0: crop})
-        assert r"\begin{figure}" in tex
+        # Not a float: multicol drops a figure environment silently, and the page is
+        # being rebuilt anyway, so where the figure falls is where the author put it.
+        assert r"\begin{figure}" not in tex
         assert "page=1" in tex
         assert "trim=1.00bp 2.00bp 3.00bp 4.00bp" in tex
 
     def test_a_caption_with_no_region_is_still_printed(self):
         tex = build([para("Fig. 1. A diagram.")], [Role.CAPTION])
         assert "Fig. 1. A diagram." in tex
-        assert r"\begin{figure}" not in tex
+        assert "includegraphics" not in tex
 
     def test_a_display_equation_is_shown_not_transcribed(self):
         # Its rules are drawn strokes the text layer does not hold, so the characters

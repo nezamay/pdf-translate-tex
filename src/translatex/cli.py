@@ -16,6 +16,7 @@ from translatex.glyphs import decide_fonts
 from translatex.pdfin import read_chars
 from translatex.pdfin import unreadable_runs
 from translatex.check import check
+from translatex.pipeline import parse_pages
 from translatex.pipeline import run
 from translatex.workdir import ensure_paper_dir
 from translatex.workdir import work_dir
@@ -84,6 +85,7 @@ def translate(args: argparse.Namespace) -> int:
         model=args.model,
         limit=args.limit,
         build=not args.no_build,
+        pages=parse_pages(args.pages),
     )
 
     print(f"paper:     {result.paper}")
@@ -113,6 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--model", default="sonnet", help="translator model (default: sonnet)")
     run.add_argument("--limit", type=int, help="stop after this many paragraphs")
     run.add_argument("--no-build", action="store_true", help="write the .tex and stop")
+    run.add_argument("--pages", help="only these pages, counted from one: 1, 1-3, 1,4-5")
     run.add_argument(
         "--source-kind",
         choices=("auto", "pdf", "arxiv"),
