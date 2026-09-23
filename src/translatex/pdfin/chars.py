@@ -56,21 +56,51 @@ def _style(span: dict) -> tuple[bool, bool]:
     return style_from_name(span["font"])
 
 
-def read_chars(
+@dataclass(frozen=True)
+class Line:
+    """One drawn line of text, as the page laid it out."""
+
+    chars: tuple[Char, ...]
+    page: int
+    block: int
+    index: int
+
+    @property
+    def text(self) -> str:
+        return "".join(c.text for c in self.chars)
+
+    @property
+    def bbox(self) -> tuple[float, float, float, float]:
+        boxes = [c.bbox for c in self.chars]
+        return (
+            min(b[0] for b in boxes),
+            min(b[1] for b in boxes),
+            max(b[2] for b in boxes),
+            max(b[3] for b in boxes),
+        )
+
+
+def read_lines(
     doc: pymupdf.Document,
     verdicts: dict[str, FontVerdict] | None = None,
-) -> list[Char]:
-    """Every character in `doc`, corrected and marked, in the order the page draws it."""
+) -> list[Line]:
+    """Every line in `doc`, corrected and marked, in the order the page draws it.
+
+    Spaces come from pymupdf, which synthesises them from the inter-character gaps —
+    these pages carry no space glyph of their own. That is worth stating because the
+    obvious alternative, re-deriving a gap threshold, is a known source of silent damage:
+    a threshold one step too wide turns "σ_yd cos" into "rydcos" and nothing complains.
+    """
     if verdicts is None:
         verdicts = decide_fonts(doc)
 
-    out: list[Char] = []
+    out: list[Line] = []
     for page in doc:
-        for block in page.get_text("rawdict")["blocks"]:
-            for line in block.get("lines", []):
+        for block_no, block in enumerate(page.get_text("rawdict")["blocks"]):
+            for line_no, line in enumerate(block.get("lines", [])):
+                chars: list[Char] = []
                 for span in line["spans"]:
-                    name = bare_name(span["font"])
-                    verdict = verdicts.get(name)
+                    verdict = verdicts.get(bare_name(span["font"]))
                     bold, italic = _style(span)
                     for ch in span["chars"]:
                         text = ch["c"]
@@ -82,7 +112,7 @@ def read_chars(
                             code = ord(text)
                             text = verdict.overrides.get(code, text)
                             readable = code not in verdict.unexplained
-                        out.append(
+                        chars.append(
                             Char(
                                 text=text,
                                 bbox=tuple(ch["bbox"]),
@@ -94,7 +124,17 @@ def read_chars(
                                 readable=readable,
                             )
                         )
+                if chars:
+                    out.append(Line(tuple(chars), page.number, block_no, line_no))
     return out
+
+
+def read_chars(
+    doc: pymupdf.Document,
+    verdicts: dict[str, FontVerdict] | None = None,
+) -> list[Char]:
+    """Every character in `doc`, corrected and marked, in the order the page draws it."""
+    return [c for line in read_lines(doc, verdicts) for c in line.chars]
 
 
 def unreadable_runs(chars: list[Char]) -> list[list[Char]]:
