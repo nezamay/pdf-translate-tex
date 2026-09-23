@@ -277,11 +277,25 @@ def equation_regions(
                max(b[2] for b in boxes), max(b[3] for b in boxes))
         band = _column_of(box, bands) or (page_rect.x0, page_rect.x1)
 
-        # The equation's own extent, widened a little. Reaching out to the prose above
-        # and below instead swallowed the sentences the publisher sets among the blocks
-        # of a display — "where ipc = u0,v0 is the geometric centroid" — and printed them
-        # as a picture, in English, beside their own translation.
-        top, bottom = box[1] - EQUATION_PAD, box[3] + EQUATION_PAD
+        # The equation's own extent, widened a little for the strokes the text layer does
+        # not hold — but never past a line that is not part of it. Reaching out to the
+        # prose above and below instead swallowed the sentences the publisher sets among
+        # the blocks of a display; widening blindly clipped the neighbouring line in half
+        # and printed the half inside the crop.
+        mine = {id(line) for i in run for line in paragraphs[i].lines}
+        others = [
+            line.bbox
+            for line in page_lines
+            if id(line) not in mine and _column_of(line.bbox, bands) == band
+        ]
+        top = max(
+            [box[1] - EQUATION_PAD]
+            + [b[3] for b in others if b[3] <= box[1]]
+        )
+        bottom = min(
+            [box[3] + EQUATION_PAD]
+            + [b[1] for b in others if b[1] >= box[3]]
+        )
         ink = ink_box(doc, page, (band[0], top, band[1], bottom))
         if ink is not None:
             found[index] = Crop(

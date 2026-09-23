@@ -50,8 +50,11 @@ CAPTION = re.compile(r"^(fig(?:ure)?|table|algorithm|alg)\.?\s*[\dIVXLC]+[.:]?",
 # The abstract and the keyword list announce themselves, with an em dash or a colon.
 ABSTRACT = re.compile(r"^(abstract|index\s+terms|keywords)\s*[—:-]", re.I)
 
-# A numbered heading: "II.", "B.", "3.2", optionally followed by its name.
-HEADING_NUMBER = re.compile(r"^(?:[IVXLC]+|[A-Z]|\d+(?:\.\d+)*)\.?(?:\s|$)")
+# A numbered heading: "II.", "B.", "3.2", "4)", followed by its name. A bare digit and a
+# space is deliberately not one — these journals number with roman numerals and letters,
+# and accepting "\d+ " made "0 −1cptz cptz 1þe2y" a section head, set large and in English
+# in the middle of a matrix.
+HEADING_NUMBER = re.compile(r"^(?:[IVXLC]+\.|[A-Z]\.|\d+\)|\d+(?:\.\d+)+)(?:\s|$)")
 
 REFERENCES_HEADING = re.compile(r"^references?$", re.I)
 
