@@ -34,7 +34,11 @@ SHORT_LINE_EM = 2.0
 #: to the sentence under it: grouped with the sentence, its line sits on the equation's
 #: own line, and the equation then decides it is sharing a line with prose and refuses to
 #: be cropped at all.
-EQUATION_NUMBER_LINE = re.compile(r"^\(\d+[a-z]?\)$")
+#: The brackets may not be brackets. Advent draws "(" as "ð" and ")" as "Þ", so the
+#: number of equation (1) arrives as "ð1Þ" — one of the substitutions no font evidence
+#: can undo. Unrecognised, the number stays glued to the sentence beneath it and the
+#: equation refuses to be cropped.
+EQUATION_NUMBER_LINE = re.compile(r"^[(ð]\d+[a-z]?[)Þ]$")
 
 
 @dataclass(frozen=True)

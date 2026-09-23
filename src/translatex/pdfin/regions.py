@@ -144,6 +144,12 @@ def figure_regions(
     return found
 
 
+#: A line has to carry this much text before a crop through it matters. The leftovers a
+#: display leaves at the start of the sentence after it — "Þ", "T =", "dt" — are lines of
+#: a prose paragraph but they are not prose, and protecting them refused eleven real
+#: equations.
+PROSE_LINE_MIN_CHARS = 12
+
 #: Another line counts as sharing the equation's line when it overlaps the equation's
 #: span by this much of its own height. A mere touch does not: the descenders of the line
 #: above reach into the ascenders of the equation on nearly every display, and treating
@@ -330,7 +336,9 @@ def equation_regions(
             for i, other in enumerate(paragraphs)
             if roles[i] in PROSE and other.lines[0].page == page
             for line in other.lines
-            if id(line) not in mine and _column_of(line.bbox, bands) == band
+            if id(line) not in mine
+            and len(line.text.strip()) >= PROSE_LINE_MIN_CHARS
+            and _column_of(line.bbox, bands) == band
         ]
         # A run that shares a line with text is not a display equation at all — it is
         # inline maths, and there is no way to crop it without cutting that line through

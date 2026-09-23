@@ -48,7 +48,7 @@ DEPTHS = (
 SECTIONS = ("section", "subsection", "subsubsection")
 
 #: An equation number set on its own, which the publisher puts in a block of its own.
-LONE_NUMBER = re.compile(r"^\(\d+[a-z]?\)$")
+LONE_NUMBER = re.compile(r"^[(ð]\d+[a-z]?[)Þ]$")
 
 
 def escape(text: str) -> str:

@@ -69,7 +69,7 @@ FRONTMATTER = re.compile(
 AFFILIATION = re.compile(r"\b(is|are)\s+with\s+the\b|@[\w.]+\.\w+", re.I)
 
 # An equation carries its number at the right margin and nothing else after it.
-EQUATION_NUMBER = re.compile(r"\(\d+[a-z]?\)\s*$")
+EQUATION_NUMBER = re.compile(r"[(ð]\d+[a-z]?[)Þ]\s*$")
 
 #: A paragraph this much larger than the body, on the opening page, is the title.
 TITLE_RATIO = 1.8
