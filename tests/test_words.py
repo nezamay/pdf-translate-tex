@@ -88,3 +88,16 @@ class TestParagraphs:
     def test_a_break_inside_a_word_is_healed(self):
         lines = [line("a contin-", y=100, index=0), line("uously moving thing", y=112, index=1)]
         assert paragraphs(lines)[0].text == "a continuously moving thing"
+
+
+class TestSoftHyphen:
+    def test_a_soft_hyphen_is_believed_without_asking_the_document(self):
+        # U+00AD is the typesetter's own break mark. No corpus PDF carries one, but a
+        # publisher that does deserves to be taken at its word rather than guessed at.
+        known = frozenset({"equipped"})
+        assert join_hyphenated("camera", "equipped", known, mark="­") == "cameraequipped"
+        assert join_hyphenated("camera", "equipped", known, mark="-") == "camera-equipped"
+
+    def test_a_soft_hyphen_break_is_healed_in_a_paragraph(self):
+        lines = [line("a camera­", y=100, index=0), line("equipped thing", y=112, index=1)]
+        assert paragraphs(lines)[0].text == "a cameraequipped thing"

@@ -81,8 +81,10 @@ def split_words(line: Line) -> list[Word]:
     return words
 
 
+SOFT_HYPHEN = "­"
+
 _WORD = re.compile(r"[^\W\d_][^\W\d_-]*(?:-[^\W\d_]+)*", re.UNICODE)
-_LINE_END_HYPHEN = re.compile(r"([^\W\d_-]+)-$", re.UNICODE)
+_LINE_END_HYPHEN = re.compile(rf"([^\W\d_-]+)[-{SOFT_HYPHEN}]$", re.UNICODE)
 _LINE_START_WORD = re.compile(r"^([^\W\d_]+)", re.UNICODE)
 
 
@@ -113,16 +115,25 @@ def vocabulary(lines: list[Line]) -> frozenset[str]:
     return frozenset(known)
 
 
-def join_hyphenated(head: str, tail: str, known: frozenset[str]) -> str:
+def join_hyphenated(head: str, tail: str, known: frozenset[str], mark: str = "-") -> str:
     """Whether a line-final hyphen survives the join, decided by the document itself.
 
-    A hyphen at a line end is either the typesetter breaking a word or part of a compound,
-    and the two look identical. Across eight papers the document answers for four out of
-    five of them: 406 breaks whose fused form appears elsewhere against 69 whose
-    hyphenated form does. For the remaining fifth the tail decides — "branch" and "and"
-    are words, so "multi-branch" and "depth-and" keep their hyphen, while "rupted" and
-    "gressive" are not, so "cor-rupted" and "autore-gressive" close up.
+    Unicode does distinguish the two cases — U+00AD is the typesetter's discretionary
+    break and U+002D the hyphen someone wrote — but the distinction does not reach a PDF.
+    The soft hyphen is an instruction to the typesetter, and once it has broken the line
+    it draws the ordinary hyphen glyph; the font has only the one, and its ToUnicode maps
+    it to U+002D. Measured across the corpus: 1450 line-final hyphens and 2735 inside
+    lines, every one of them U+002D, and not a single U+00AD anywhere. So the mark is
+    honoured when it is there and the document is asked when it is not.
+
+    Asking the document works. It answers 1091 of 1439 breaks outright: 983 whose fused
+    form it spells out elsewhere against 108 whose hyphenated form it does. For the rest
+    the tail decides — "equipped" and "plane" are words, so "camera-equipped" and
+    "two-plane" keep their hyphen, while "uously" and "passing" are not, so
+    "continuously" and "encompassing" close up.
     """
+    if mark == SOFT_HYPHEN:
+        return head + tail
     if (head + tail).lower() in known:
         return head + tail
     if f"{head}-{tail}".lower() in known:
@@ -144,7 +155,9 @@ class Paragraph:
             head = _LINE_END_HYPHEN.search(out)
             tail = _LINE_START_WORD.match(piece)
             if head and tail and piece[:1].islower():
-                joined = join_hyphenated(head.group(1), tail.group(1), self.known_words)
+                joined = join_hyphenated(
+                    head.group(1), tail.group(1), self.known_words, mark=out[head.end() - 1]
+                )
                 out = out[: head.start()] + joined + piece[tail.end() :]
             elif out:
                 out = f"{out} {piece}"
