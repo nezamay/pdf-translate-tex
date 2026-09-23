@@ -93,8 +93,16 @@ MATHS_FONT_SHARE = 0.35
 #: face and carry no other signal at all.
 EQUATION_NEIGHBOUR_CHARS = 25
 
-#: A running head or folio is short; anything longer at the page edge is content.
-RUNNING_MAX_CHARS = 60
+#: A folio is this short. Longer furniture — the journal's running head, a download
+#: stamp — is caught by repeating on page after page, which is a far better signal than
+#: position and does not depend on guessing where the text block begins.
+RUNNING_MAX_CHARS = 12
+
+#: And it stands clear of the text block by at least this much, in body sizes. Without a
+#: gap the rule ate the first line of a column whenever it was short: "relative
+#: relationship can be expressed as" sits a few points above the fifth percentile of line
+#: tops, which is not a margin, and it took the equation under it along.
+RUNNING_GAP_EM = 1.0
 
 #: A text appearing verbatim on this many pages is furniture.
 REPEATS_TO_BE_FURNITURE = 3
@@ -148,7 +156,11 @@ class Layout:
             key=lambda line: line.bbox[1],
         )
         if body_lines:
-            edge = max(1, len(body_lines) // 20)
+            # A short tail, not a fifth of a percent short of nothing: the text block
+            # starts where the first column starts, and taking 5% of lines as "above the
+            # body" put the boundary thirty points into the text, which made the opening
+            # line of a column a running head whenever it was short.
+            edge = max(1, len(body_lines) // 200)
             top = body_lines[edge - 1].bbox[1]
             bottom = sorted(body_lines, key=lambda line: line.bbox[3])[-edge].bbox[3]
         else:
@@ -259,7 +271,8 @@ def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
             # head was ever set at twice the body size.
             roles.append(Role.TITLE)
         elif len(text) < RUNNING_MAX_CHARS and (
-            box[3] < layout.top_margin or box[1] > layout.bottom_margin
+            box[3] < layout.top_margin - RUNNING_GAP_EM * layout.body_size
+            or box[1] > layout.bottom_margin + RUNNING_GAP_EM * layout.body_size
         ):
             # A running head or a folio is short AND sits outside the band the body
             # occupies. Position alone is not enough: the first line of a section and the

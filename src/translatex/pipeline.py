@@ -27,12 +27,11 @@ from translatex.pdfin import Paragraph
 from translatex.pdfin import paragraphs
 from translatex.pdfin import read_chars
 from translatex.pdfin import read_lines
-from translatex.pdfin.crops import Crop
 from translatex.pdfin.crops import glyph_crops
-from translatex.pdfin.crops import ink_box
 from translatex.pdfin.crops import save_glyph
 from translatex.pdfin.crops import trim
 from translatex.pdfin.regions import columns
+from translatex.pdfin.regions import equation_regions
 from translatex.pdfin.regions import figure_regions
 from translatex.pdfin.roles import Layout
 from translatex.pdfin.roles import Role
@@ -52,9 +51,6 @@ def report(line: str) -> None:
     it, and the whole point is that it arrives while the run is still going.
     """
     print(line, flush=True)
-
-#: Room around a display equation, so the ink is not shaved by rounding.
-EQUATION_PAD = 1.0
 
 #: What a language code means to the translator, to polyglossia and to the file name.
 #: The translator is told the name, not the code: "translate into ru" is not an
@@ -91,31 +87,6 @@ class Result:
     seconds: float = 0.0
     tectonic: int = 0
     missing_characters: list[str] = field(default_factory=list)
-
-
-def equation_regions(doc, pieces: list[Paragraph], roles: list[Role]) -> dict[int, Crop]:
-    """The region each display equation occupies, shrunk to its ink."""
-    found: dict[int, Crop] = {}
-    for index, (paragraph, role) in enumerate(zip(pieces, roles, strict=True)):
-        if role is not Role.EQUATION:
-            continue
-        boxes = [line.bbox for line in paragraph.lines]
-        page = paragraph.lines[0].page
-        rect = (
-            min(b[0] for b in boxes) - EQUATION_PAD,
-            min(b[1] for b in boxes) - EQUATION_PAD,
-            max(b[2] for b in boxes) + EQUATION_PAD,
-            max(b[3] for b in boxes) + EQUATION_PAD,
-        )
-        ink = ink_box(doc, page, rect)
-        if ink is None:
-            continue
-        found[index] = Crop(
-            f"eq_{index}", page,
-            (ink[0] - EQUATION_PAD, ink[1] - EQUATION_PAD,
-             ink[2] + EQUATION_PAD, ink[3] + EQUATION_PAD),
-        )
-    return found
 
 
 def parse_pages(spec: str | None) -> set[int] | None:
@@ -161,7 +132,7 @@ def run(source: Path, *, language: str = "ru", claude: str = "claude",
         lines = [line for line in lines if line.page in pages]
 
     figures = figure_regions(doc, lines, pieces, roles)
-    equations = equation_regions(doc, pieces, roles)
+    equations, absorbed = equation_regions(doc, lines, pieces, roles)
     glyphs = glyph_crops(read_chars(doc))
     page_size = (doc[0].rect.width, doc[0].rect.height)
     widest = max((line.page for line in lines), default=0)
@@ -218,7 +189,7 @@ def run(source: Path, *, language: str = "ru", claude: str = "claude",
         pieces, roles, rendered, figures, equations,
         source=pdf.name, page=page_size, columns=column_count,
         body_size=layout.body_size, trim_of=lambda crop: trim(doc, crop), assets=assets,
-        babel=babel,
+        babel=babel, skip=absorbed,
     )
 
     tex_path = work / "main.tex"

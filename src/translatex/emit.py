@@ -197,6 +197,7 @@ def document(
     trim_of,
     assets: Assets | None = None,
     babel: str = "russian",
+    skip: set[int] | None = None,
 ) -> str:
     """The whole paper as one LaTeX source.
 
@@ -207,9 +208,14 @@ def document(
     and an equation.
     """
     assets = assets or Assets(source)
+    skip = skip or set()
     body: list[str] = []
 
     for index, (paragraph, role) in enumerate(zip(paragraphs, roles, strict=True)):
+        # Swallowed by the equation above it: a display equation is laid out as a row of
+        # separate blocks and only the first of them carries the region.
+        if index in skip:
+            continue
         raw = paragraph.text.strip()
         text = rendered.get(index) or escape(raw)
         if not raw:

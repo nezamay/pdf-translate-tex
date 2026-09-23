@@ -250,3 +250,88 @@ def _between(
     if bottom - top < MIN_FIGURE_HEIGHT:
         return None
     return (span[0], top, span[1], bottom)
+
+
+#: Room around a display equation, so no stroke is shaved by rounding.
+EQUATION_PAD = 1.0
+
+#: Roles that end an equation's band. Everything between two of them belongs to the
+#: equation, whatever it was classified as on its own.
+PROSE = frozenset({Role.BODY, Role.HEADING, Role.CAPTION, Role.ABSTRACT,
+                   Role.TITLE, Role.AUTHORS, Role.REFERENCE, Role.FRONTMATTER})
+
+
+def equation_regions(
+    doc: pymupdf.Document,
+    lines: list[Line],
+    paragraphs: list[Paragraph],
+    roles: list[Role],
+) -> tuple[dict[int, Crop], set[int]]:
+    """One region per display equation, and the paragraph indices it swallowed.
+
+    A display equation is not a paragraph. The publisher lays it out as a row of separate
+    blocks — a numerator here, a radical there, a lone subscript — so taking each block as
+    its own region cut one equation into a dozen slivers, each set as a picture of almost
+    nothing, with the pieces that happened to look like prose printed as text between them.
+
+    The region is therefore the band between the prose above and the prose below, in the
+    equation's own column, exactly as a figure's is. And everything standing in that band
+    belongs to the equation, whatever it was classified as: a fragment that reads like a
+    sentence is still part of the display it sits inside.
+    """
+    by_page: dict[int, list[Line]] = {}
+    for line in lines:
+        by_page.setdefault(line.page, []).append(line)
+
+    found: dict[int, Crop] = {}
+    absorbed: set[int] = set()
+
+    index = 0
+    while index < len(roles):
+        if roles[index] is not Role.EQUATION or index in absorbed:
+            index += 1
+            continue
+
+        page = paragraphs[index].lines[0].page
+        page_lines = by_page.get(page, [])
+        page_rect = doc[page].rect
+        bands = columns(page_lines, page_rect.width)
+
+        run = [index]
+        while (
+            run[-1] + 1 < len(roles)
+            and roles[run[-1] + 1] is Role.EQUATION
+            and paragraphs[run[-1] + 1].lines[0].page == page
+        ):
+            run.append(run[-1] + 1)
+
+        boxes = [line.bbox for i in run for line in paragraphs[i].lines]
+        box = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+               max(b[2] for b in boxes), max(b[3] for b in boxes))
+        band = _column_of(box, bands) or (page_rect.x0, page_rect.x1)
+
+        prose = [
+            line.bbox
+            for i, paragraph in enumerate(paragraphs)
+            if roles[i] in PROSE and paragraph.lines[0].page == page
+            for line in paragraph.lines
+            if _column_of(line.bbox, bands) == band
+        ]
+        top = max([b[3] for b in prose if b[3] <= box[1]], default=page_rect.y0)
+        bottom = min([b[1] for b in prose if b[1] >= box[3]], default=page_rect.y1)
+
+        ink = ink_box(doc, page, (band[0], top, band[1], bottom))
+        if ink is not None:
+            found[index] = Crop(
+                f"eq_{index}", page,
+                (ink[0] - EQUATION_PAD, ink[1] - EQUATION_PAD,
+                 ink[2] + EQUATION_PAD, ink[3] + EQUATION_PAD),
+            )
+            for i, paragraph in enumerate(paragraphs):
+                if i == index or paragraph.lines[0].page != page:
+                    continue
+                first = paragraph.lines[0].bbox
+                if top <= first[1] and first[3] <= bottom and _column_of(first, bands) == band:
+                    absorbed.add(i)
+        index = run[-1] + 1
+    return found, absorbed
