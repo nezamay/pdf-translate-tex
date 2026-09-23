@@ -59,7 +59,8 @@ REFERENCES_HEADING = re.compile(r"^references?$", re.I)
 FRONTMATTER = re.compile(
     r"^(manuscript\s+received|received\s+\d|revised\s+\d|accepted\s+\d"
     r"|digital\s+object\s+identifier|doi\b|\d{4}-\d{3}[\dx]\s*©|©\s*\d{4}"
-    r"|corresponding\s+author|this\s+work\s+was\s+supported)",
+    r"|corresponding\s+author|this\s+work\s+was\s+supported"
+    r"|personal\s+use\s+is\s+permitted|authorized\s+licensed\s+use)",
     re.I,
 )
 AFFILIATION = re.compile(r"\b(is|are)\s+with\s+the\b|@[\w.]+\.\w+", re.I)
@@ -82,6 +83,12 @@ TEXT_FONT_COVERAGE = 0.9
 
 #: A running head or folio is short; anything longer at the page edge is content.
 RUNNING_MAX_CHARS = 60
+
+#: A text appearing verbatim on this many pages is furniture.
+REPEATS_TO_BE_FURNITURE = 3
+
+#: Too short to be worth comparing: a stray letter or a stub repeats by accident.
+FURNITURE_MIN_CHARS = 12
 
 #: A drop cap is set at least this much larger than the heading beside it.
 DROP_CAP_RATIO = 1.5
@@ -173,6 +180,27 @@ def _looks_like_heading(text: str, size: float, layout: Layout) -> bool:
     )
 
 
+def _repeated(paragraphs: list[Paragraph]) -> set[str]:
+    """Texts that appear on several pages, which makes them furniture and not content.
+
+    A running head, a copyright line and a library's download stamp all repeat unchanged
+    page after page, and nothing a paper actually says does. One rule covers the lot, and
+    it covers them whatever they happen to say — which matters, because the stamp is a
+    sentence, sits in the middle of a column and is set in the text face.
+
+    Compared verbatim. Blanking the numbers first, so that a folio would match its
+    neighbours, made every figure caption furniture instead: this runs before the pieces
+    of a caption are stitched together, and "Fig. 1." and "Fig. 2." are the same line
+    once their numbers are gone. Folios are caught by the margin rule anyway.
+    """
+    pages: dict[str, set[int]] = {}
+    for paragraph in paragraphs:
+        key = paragraph.text.strip().lower()
+        if len(key) >= FURNITURE_MIN_CHARS:
+            pages.setdefault(key, set()).add(paragraph.lines[0].page)
+    return {key for key, seen in pages.items() if len(seen) >= REPEATS_TO_BE_FURNITURE}
+
+
 def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
     """A role for each paragraph, in order.
 
@@ -180,6 +208,7 @@ def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
     "[12] A. Author, ..." is unmistakable, but so is a citation in running text, and the
     heading says which side of the document we are on.
     """
+    furniture = _repeated(paragraphs)
     roles: list[Role] = []
     in_references = False
     first_page = paragraphs[0].lines[0].page if paragraphs else 0
@@ -199,6 +228,8 @@ def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
             continue
 
         if not text:
+            roles.append(Role.RUNNING)
+        elif text.lower() in furniture:
             roles.append(Role.RUNNING)
         elif page == first_page and size >= TITLE_RATIO * layout.body_size:
             # Before the running-head test, not after: a title is set above the band the
