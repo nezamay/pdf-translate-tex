@@ -10,9 +10,12 @@ from translatex.pdfin.crops import glyph_crops
 from translatex.pdfin.crops import save_glyph
 from translatex.pdfin.crops import tighten
 from translatex.pdfin.crops import trim
+from translatex.pdfin.crops import ink_box
 from translatex.pdfin.fonts import bare_name
 from translatex.pdfin.fonts import family
 from translatex.pdfin.fonts import style_from_name
+from translatex.pdfin.regions import columns
+from translatex.pdfin.regions import figure_regions
 from translatex.pdfin.words import Paragraph
 from translatex.pdfin.words import Word
 from translatex.pdfin.words import paragraphs
@@ -25,8 +28,11 @@ __all__ = [
     "Paragraph",
     "Word",
     "bare_name",
+    "columns",
     "family",
+    "figure_regions",
     "glyph_crops",
+    "ink_box",
     "paragraphs",
     "read_chars",
     "read_lines",

@@ -80,22 +80,22 @@ INK_DPI = 300
 INK_THRESHOLD = 250
 
 
-def tighten(doc: pymupdf.Document, crop: Crop, pad: float = GLYPH_PAD) -> Crop:
-    """Shrink a crop to the ink inside it, leaving `pad` of paper around it.
+def ink_box(doc: pymupdf.Document, page_number: int,
+            rect: tuple[float, float, float, float]) -> tuple[float, float, float, float] | None:
+    """Where the ink is inside a region, or None when the region is blank.
 
-    A character's box is the height of its line, not of its mark, so a crop taken at face
-    value carries a band of empty paper above and below it. Finding the ink is a matter of
-    looking: the region is rendered once and scanned for pixels darker than paper. A box
-    with no ink at all is returned unchanged, because there is nothing to shrink to.
+    The region is rendered once and scanned for pixels darker than paper. Blankness is
+    worth reporting rather than hiding: a figure region that comes back empty means the
+    figure was not where it was looked for, and the caller can look again elsewhere.
     """
-    page = doc[crop.page]
-    rect = pymupdf.Rect(*crop.rect) & page.rect
-    if rect.is_empty:
-        return crop
+    page = doc[page_number]
+    box = pymupdf.Rect(*rect) & page.rect
+    if box.is_empty:
+        return None
 
-    pix = page.get_pixmap(clip=rect, dpi=INK_DPI, alpha=False, colorspace=pymupdf.csGRAY)
+    pix = page.get_pixmap(clip=box, dpi=INK_DPI, alpha=False, colorspace=pymupdf.csGRAY)
     if not pix.width or not pix.height:
-        return crop
+        return None
 
     samples = pix.samples
     rows = [
@@ -104,27 +104,36 @@ def tighten(doc: pymupdf.Document, crop: Crop, pad: float = GLYPH_PAD) -> Crop:
         if min(samples[y * pix.stride : y * pix.stride + pix.width]) < INK_THRESHOLD
     ]
     if not rows:
-        return crop
-    columns = [
+        return None
+    columns_with_ink = [
         x
         for x in range(pix.width)
         if any(samples[y * pix.stride + x] < INK_THRESHOLD for y in rows)
     ]
-    if not columns:
-        return crop
+    if not columns_with_ink:
+        return None
 
-    scale_x = rect.width / pix.width
-    scale_y = rect.height / pix.height
-    return Crop(
-        crop.name,
-        crop.page,
-        (
-            rect.x0 + columns[0] * scale_x - pad,
-            rect.y0 + rows[0] * scale_y - pad,
-            rect.x0 + (columns[-1] + 1) * scale_x + pad,
-            rect.y0 + (rows[-1] + 1) * scale_y + pad,
-        ),
+    scale_x = box.width / pix.width
+    scale_y = box.height / pix.height
+    return (
+        box.x0 + columns_with_ink[0] * scale_x,
+        box.y0 + rows[0] * scale_y,
+        box.x0 + (columns_with_ink[-1] + 1) * scale_x,
+        box.y0 + (rows[-1] + 1) * scale_y,
     )
+
+
+def tighten(doc: pymupdf.Document, crop: Crop, pad: float = GLYPH_PAD) -> Crop:
+    """Shrink a crop to the ink inside it, leaving `pad` of paper around it.
+
+    A character's box is the height of its line, not of its mark, so a crop taken at face
+    value carries a band of empty paper above and below it. A box with no ink at all is
+    returned unchanged, because there is nothing to shrink to.
+    """
+    box = ink_box(doc, crop.page, crop.rect)
+    if box is None:
+        return crop
+    return Crop(crop.name, crop.page, (box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad))
 
 
 def trim(doc: pymupdf.Document, crop: Crop) -> tuple[float, float, float, float]:
