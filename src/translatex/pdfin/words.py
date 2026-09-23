@@ -131,6 +131,22 @@ def join_hyphenated(head: str, tail: str, known: frozenset[str], mark: str = "-"
     the tail decides — "equipped" and "plane" are words, so "camera-equipped" and
     "two-plane" keep their hyphen, while "uously" and "passing" are not, so
     "continuously" and "encompassing" close up.
+
+    Scored against the system word list on the 869 corpus breaks it can settle:
+
+        rule                        accuracy   breaks    compounds   spurious hyphens
+        fused / hyphenated / tail      95.6%   678/680     153/189                  2
+        fused / hyphenated only        89.3%   680/680      96/189                  0
+        always join                    78.3%   680/680       0/189                  0
+        always keep                    21.7%     0/680     189/189                680
+
+    The tail step is worth having because of the last column, not the first: it buys 57
+    compounds for two spurious hyphens. The asymmetry is the point — fusing a compound
+    gives "multiagent", which any reader or translator still understands, while splitting
+    a word gives "in-creasingly", which invites being read as a compound and translated
+    as one. A fourth step, treating a head the document hyphenates elsewhere as a prefix,
+    was measured and dropped: nine more compounds for two more spurious hyphens is four
+    times the worse trade.
     """
     if mark == SOFT_HYPHEN:
         return head + tail
