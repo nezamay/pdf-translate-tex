@@ -11,6 +11,19 @@ failure rather than retried. And a translation that came back missing one of its
 is a lost formula, silently — so it is checked, retried, and failing that the paragraph
 is left in its original language, which is obvious to a reader in a way a missing formula
 is not.
+
+One paragraph per call, not several. Batching looks like the obvious saving and is not —
+measured on ten paragraphs carrying twenty-nine expressions, the same model in the same
+conditions:
+
+    one paragraph per call     42.9 s   10 calls   all returned, all expressions intact
+    five per call as JSON      91.8 s    2 calls   all returned, all expressions intact
+
+Twice as slow, because the cost is in generating the translation and a batch generates
+five of them in one serial call while sending a fresh payload each time instead of
+building on a warm session. The quality was worse too: the batched run left "Fig. 2"
+in English where the single call wrote "Рис. 2". Fewer calls also means a wider blast
+radius — one failure loses five paragraphs instead of one.
 """
 
 from __future__ import annotations
