@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import re
+import shutil
 import sys
 from collections import Counter
 from pathlib import Path
@@ -13,6 +15,7 @@ import pymupdf
 from translatex.glyphs import decide_fonts
 from translatex.pdfin import read_chars
 from translatex.pdfin import unreadable_runs
+from translatex.pipeline import run
 from translatex.workdir import ensure_paper_dir
 from translatex.workdir import work_dir
 
@@ -72,11 +75,28 @@ def translate(args: argparse.Namespace) -> int:
         print(f"arxiv path is not implemented yet: {args.source}", file=sys.stderr)
         return 2
 
-    paper = ensure_paper_dir(Path(args.source))
-    print(f"paper: {paper}")
-    print(f"work:  {work_dir(paper)}")
-    print("pdf path is not implemented yet", file=sys.stderr)
-    return 2
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    result = run(
+        Path(args.source),
+        language=args.lang,
+        claude=shutil.which("claude") or "claude",
+        model=args.model,
+        limit=args.limit,
+        build=not args.no_build,
+    )
+
+    print(f"paper:     {result.paper}")
+    print(f"tex:       {result.tex}")
+    print(f"translated {result.translated} paragraphs, held {result.untranslated}")
+    print(f"figures {result.figures}, equations {result.equations}, glyphs {result.glyphs}")
+    if result.pdf:
+        print(f"pdf:       {result.pdf}  ({result.pages} pages)")
+    else:
+        print(f"tectonic exited {result.tectonic}; see {result.tex.parent / 'tectonic.log'}")
+    if result.missing_characters:
+        print(f"missing characters: {len(result.missing_characters)}")
+    print(f"took {result.seconds:.0f}s")
+    return 0 if result.pdf else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,6 +109,9 @@ def build_parser() -> argparse.ArgumentParser:
     run = commands.add_parser("translate", help="translate a paper (default)")
     run.add_argument("source", help="a PDF path, an arXiv id, or an arXiv URL")
     run.add_argument("--lang", default="ru", help="target language (default: ru)")
+    run.add_argument("--model", default="sonnet", help="translator model (default: sonnet)")
+    run.add_argument("--limit", type=int, help="stop after this many paragraphs")
+    run.add_argument("--no-build", action="store_true", help="write the .tex and stop")
     run.add_argument(
         "--source-kind",
         choices=("auto", "pdf", "arxiv"),

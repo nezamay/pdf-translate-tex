@@ -196,6 +196,7 @@ def document(
     body_size: float,
     trim_of,
     assets: Assets | None = None,
+    babel: str = "russian",
 ) -> str:
     """The whole paper as one LaTeX source.
 
@@ -259,6 +260,6 @@ def document(
     if columns > 1:
         inner = "\\begin{multicols}{%d}\n%s\n\\end{multicols}" % (columns, inner)
     return "%s\n\\begin{document}\n%s\n\\end{document}\n" % (
-        preamble(page=page, columns=columns, body_size=body_size),
+        preamble(page=page, columns=columns, body_size=body_size, language=babel),
         inner,
     )
