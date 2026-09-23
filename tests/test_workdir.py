@@ -1,6 +1,7 @@
 import pytest
 
 from translatex.cli import classify_source
+from translatex.cli import with_default_command
 from translatex.workdir import WORK_DIRNAME
 from translatex.workdir import ensure_paper_dir
 from translatex.workdir import work_dir
@@ -58,3 +59,17 @@ def test_work_dir_is_created_under_the_paper(tmp_path):
 )
 def test_source_kind_is_guessed_from_the_argument(source, kind):
     assert classify_source(source) == kind
+
+
+class TestCommandLine:
+    def test_a_bare_path_still_means_translate(self):
+        assert with_default_command(["paper.pdf"]) == ["translate", "paper.pdf"]
+
+    def test_a_named_command_is_left_alone(self):
+        assert with_default_command(["fonts", "paper.pdf"]) == ["fonts", "paper.pdf"]
+
+    def test_a_flag_is_not_mistaken_for_a_path(self):
+        assert with_default_command(["--help"]) == ["--help"]
+
+    def test_nothing_at_all_stays_nothing(self):
+        assert with_default_command([]) == []
