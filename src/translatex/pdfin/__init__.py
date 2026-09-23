@@ -7,6 +7,7 @@ from translatex.pdfin.chars import read_lines
 from translatex.pdfin.chars import unreadable_runs
 from translatex.pdfin.crops import Crop
 from translatex.pdfin.crops import glyph_crops
+from translatex.pdfin.crops import save_glyph
 from translatex.pdfin.crops import tighten
 from translatex.pdfin.crops import trim
 from translatex.pdfin.fonts import bare_name
@@ -30,6 +31,7 @@ __all__ = [
     "read_chars",
     "read_lines",
     "split_words",
+    "save_glyph",
     "style_from_name",
     "tighten",
     "trim",

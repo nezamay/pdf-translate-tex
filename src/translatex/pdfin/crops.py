@@ -5,16 +5,16 @@ display equation, whose fraction bars and matrix rules are drawn strokes that th
 layer does not contain; and a glyph nobody could identify, which has to appear as itself
 because there is nothing to write instead.
 
-Nothing here writes a file. A crop is a region — a page and a rectangle — and the document
+A large region is not written out at all. It is a page and a rectangle, and the document
 shows it with `\\includegraphics[page=N,trim=...,clip]{original.pdf}`, straight from the
-source that is sitting in the same folder anyway. That keeps it vector, costs no bytes,
-and cannot drift out of step with the file it came from.
+source sitting in the same folder. That keeps it vector, costs no file, and cannot drift
+out of step with what it came from. Extracting it instead was measured and rejected: every
+extracted region carries a copy of its page's resources, a flat 56 kB whether it holds a
+whole figure or one comma.
 
-Writing crops out was tried first and measured: every extracted region carries a copy of
-its page's resources, a flat 56 kB whether the region is a whole figure or one comma, so
-eighteen glyphs came to two megabytes. Rastering instead is small for a glyph and ruinous
-for a figure — 359 bytes for one mark at 1200 dpi, 1.6 MB for a half-page. Referring to
-the original is better than both and simpler than either.
+A glyph goes out as a picture, because the same accounting reverses at that size. See
+`save_glyph` for the numbers; the short of it is that a mark costs a few hundred bytes as
+a picture and 41 kB as a reference, and a figure the other way round.
 
 Glyph regions are found once per distinct glyph, not once per occurrence. Measured across
 twenty papers: 2322 unreadable characters are 124 distinct glyphs, fifteen to twenty-two
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import pymupdf
 
@@ -129,11 +130,10 @@ def tighten(doc: pymupdf.Document, crop: Crop, pad: float = GLYPH_PAD) -> Crop:
 def trim(doc: pymupdf.Document, crop: Crop) -> tuple[float, float, float, float]:
     """The graphicx `trim` for this region: how much to cut off left, bottom, right, top.
 
-    Nothing is written out. `\\includegraphics[page=N,trim=...,clip]{original.pdf}` shows
-    the region straight from the source, which keeps it vector, costs no bytes and cannot
-    drift out of step with the file it came from. Cropping to separate PDFs was measured
-    first and rejected: every crop carries a copy of its page's resources, a flat 56 kB
-    whatever its size, so eighteen glyphs came to two megabytes.
+    Nothing is written out — the region is shown from the original, which stays vector and
+    costs no file. Worth knowing before using this on something small: each inclusion
+    embeds a copy of the source page, about 41 kB, and xdvipdfmx does not share it between
+    inclusions even when they name the same page. See `save_glyph`.
 
     The y axis is flipped on the way: pymupdf counts down from the top, graphicx up from
     the bottom.
@@ -141,6 +141,35 @@ def trim(doc: pymupdf.Document, crop: Crop) -> tuple[float, float, float, float]
     page = doc[crop.page].rect
     left, top, right, bottom = crop.rect
     return (left, page.height - bottom, page.width - right, top)
+
+
+#: Resolution for a glyph picture. A mark a few points wide comes to a few hundred bytes
+#: here and stays sharp well past what printing resolves.
+GLYPH_DPI = 1200
+
+
+def save_glyph(doc: pymupdf.Document, crop: Crop, directory: Path) -> Path:
+    """Render one glyph to its own small picture and return where it landed.
+
+    Small reproductions go out as pictures while large ones are shown from the original,
+    and the split is not aesthetic. Measured on a paper with eighteen distinct glyphs,
+    each included six times:
+
+        108 inclusions by trim from the original   742 kB
+        108 inclusions from one shared crop PDF    742 kB
+        108 inclusions from a picture per glyph     42 kB
+
+    xdvipdfmx embeds the source page once per inclusion and never shares it, even when
+    every inclusion names the same page — but it does reuse an identical picture file, so
+    a glyph appearing nineteen times costs what it costs once. The eighteen pictures come
+    to 32 kB together. For a figure the accounting reverses: one inclusion, large area,
+    and the vector original is both smaller and better.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{crop.name}.png"
+    rect = pymupdf.Rect(*crop.rect) & doc[crop.page].rect
+    doc[crop.page].get_pixmap(clip=rect, dpi=GLYPH_DPI, alpha=False).save(path)
+    return path
 
 
 def glyph_crops(chars: list[Char]) -> dict[tuple[str, str], Crop]:

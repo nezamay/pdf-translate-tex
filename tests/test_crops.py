@@ -81,3 +81,15 @@ class TestTighten:
     def test_an_empty_box_is_left_alone(self, page_with_a_mark):
         outside = Crop("x", 0, (1000.0, 1000.0, 1010.0, 1010.0))
         assert tighten(page_with_a_mark, outside) == outside
+
+
+class TestSaveGlyph:
+    def test_a_glyph_is_written_as_its_own_small_picture(self, page_with_a_mark, tmp_path):
+        from translatex.pdfin.crops import save_glyph
+
+        crop = Crop("mark", 0, (149.0, 199.0, 157.0, 207.0))
+        path = save_glyph(page_with_a_mark, crop, tmp_path / "glyphs")
+        assert path.name == "mark.png"
+        # A mark eight points across, rendered well past printing resolution, still has
+        # to stay small: a picture per glyph is only worth it if it is cheap.
+        assert 0 < path.stat().st_size < 20_000
