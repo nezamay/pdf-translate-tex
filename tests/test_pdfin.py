@@ -1,8 +1,10 @@
 import pytest
 
 from translatex.pdfin import Char
+from translatex.pdfin import Line
 from translatex.pdfin import bare_name
 from translatex.pdfin import family
+from translatex.pdfin import stitch
 from translatex.pdfin import style_from_name
 from translatex.pdfin import unreadable_runs
 
@@ -82,3 +84,40 @@ class TestNamesWithoutASubsetPrefix:
 
     def test_a_plus_that_is_not_a_prefix_is_kept(self):
         assert bare_name("Advent+Extra") == "Advent+Extra"
+
+
+def fragment(text: str, x0: float, *, y: float = 100.0, size: float = 10.0,
+             block: int = 0, index: int = 0) -> Line:
+    step = size / 2
+    chars = tuple(
+        Char(text=ch, bbox=(x0 + i * step, y, x0 + (i + 1) * step, y + size),
+             page=0, font="Text", size=size)
+        for i, ch in enumerate(text)
+    )
+    return Line(chars, 0, block, index)
+
+
+class TestStitch:
+    def test_a_justified_line_cut_into_words_is_put_back(self):
+        # A line stretched to fill its measure has word gaps wide enough that pymupdf
+        # calls each word a line. Left alone, each one then looks like an indent and
+        # becomes a paragraph of its own.
+        row = [fragment("inappropriate", 41.8), fragment("guidance", 102.4),
+               fragment("strategies,", 146.3), fragment("and", 194.0)]
+        stitched = stitch(row)
+        assert len(stitched) == 1
+        assert stitched[0].text == "inappropriate guidance strategies, and"
+
+    def test_the_other_column_is_not_joined_on(self):
+        # A gutter is several times wider than any word gap, which is what keeps the
+        # two columns of a journal page apart.
+        row = [fragment("left column text", 41.8), fragment("right column text", 305.0)]
+        assert len(stitch(row)) == 2
+
+    def test_different_baselines_stay_different_lines(self):
+        rows = [fragment("first", 41.8, y=100.0), fragment("second", 41.8, y=112.0)]
+        assert len(stitch(rows)) == 2
+
+    def test_a_line_that_was_never_cut_is_returned_as_it_was(self):
+        only = fragment("a whole line of text", 41.8)
+        assert stitch([only]) == [only]

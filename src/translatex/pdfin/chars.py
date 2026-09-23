@@ -141,7 +141,75 @@ def read_lines(
                         )
                 if chars:
                     out.append(Line(tuple(chars), page.number, block_no, line_no))
+    return stitch(out)
+
+
+#: Two fragments this close, measured in body sizes, are one line broken by the reader
+#: rather than by the typesetter. A column gutter is several times wider.
+FRAGMENT_GAP_EM = 3.0
+
+#: Baselines within this many points are the same baseline.
+BASELINE_TOLERANCE = 1.5
+
+
+def stitch(lines: list[Line]) -> list[Line]:
+    """Put back together the lines pymupdf cut at a wide word gap.
+
+    A justified line stretched to fill its measure has word gaps wide enough that pymupdf
+    reports each word as a line of its own: one line of this corpus came back as six,
+    "inappropriate / guidance / strategies, / and / target / maneuvers.", all at the same
+    baseline in the same block. Everything downstream then treats each word as a
+    paragraph, because each one starts further right than the last and that is what an
+    indent looks like.
+
+    Fragments join when they share a page, a block and a baseline, and sit within a few
+    body sizes of each other — the last condition is what keeps the two columns apart,
+    since a gutter is several times wider than any word gap.
+    """
+    by_row: dict[tuple[int, int, int], list[Line]] = {}
+    order: list[tuple[int, int, int]] = []
+    for line in lines:
+        key = (line.page, line.block, round(line.bbox[3] / BASELINE_TOLERANCE))
+        if key not in by_row:
+            by_row[key] = []
+            order.append(key)
+        by_row[key].append(line)
+
+    out: list[Line] = []
+    for key in order:
+        row = sorted(by_row[key], key=lambda line: line.bbox[0])
+        group = [row[0]]
+        for line in row[1:]:
+            size = max(c.size for c in group[-1].chars) or 10.0
+            if line.bbox[0] - group[-1].bbox[2] <= FRAGMENT_GAP_EM * size:
+                group.append(line)
+            else:
+                out.append(_merge(group))
+                group = [line]
+        out.append(_merge(group))
     return out
+
+
+def _merge(group: list[Line]) -> Line:
+    """One line from fragments of it, with a space wherever a gap was."""
+    if len(group) == 1:
+        return group[0]
+    chars: list[Char] = []
+    for index, line in enumerate(group):
+        if index:
+            previous = chars[-1]
+            chars.append(
+                Char(
+                    text=" ",
+                    bbox=(previous.bbox[2], previous.bbox[1], line.bbox[0], previous.bbox[3]),
+                    page=previous.page,
+                    font=previous.font,
+                    size=previous.size,
+                )
+            )
+        chars.extend(line.chars)
+    first = group[0]
+    return Line(tuple(chars), first.page, first.block, first.index)
 
 
 def read_chars(

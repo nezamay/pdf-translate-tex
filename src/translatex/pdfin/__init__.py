@@ -4,6 +4,7 @@ from translatex.pdfin.chars import Char
 from translatex.pdfin.chars import Line
 from translatex.pdfin.chars import read_chars
 from translatex.pdfin.chars import read_lines
+from translatex.pdfin.chars import stitch
 from translatex.pdfin.chars import unreadable_runs
 from translatex.pdfin.crops import Crop
 from translatex.pdfin.crops import glyph_crops
@@ -37,6 +38,7 @@ __all__ = [
     "read_chars",
     "read_lines",
     "split_words",
+    "stitch",
     "save_glyph",
     "style_from_name",
     "tighten",
