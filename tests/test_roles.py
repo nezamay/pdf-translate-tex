@@ -131,3 +131,37 @@ class TestMerge:
         merged, roles = merge(paragraphs, classify(paragraphs, layout_for(paragraphs)))
         assert merged[-2].text == "I. INTRODUCTION"
         assert merged[-1].text.startswith("THE presence")
+
+
+class TestEquationFragments:
+    def test_a_fragment_full_of_maths_faces_is_an_equation(self):
+        # "¼ eat" has three letters in five characters, so the letter share calls it
+        # prose. It went to the translator, came back unchanged because there was
+        # nothing to translate, and was set as text in the middle of an equation.
+        fragment = Paragraph((line("= eat", size=10.0, font="Maths", y=400.0),))
+        roles = classify([*FILLER, fragment], layout_for([*FILLER, fragment]))
+        assert roles[-1] is Role.EQUATION
+
+    def test_prose_with_a_variable_in_it_is_still_prose(self):
+        mixed = Paragraph((
+            line("the gain of the controller was set to two", y=400.0),
+            line("ka", size=10.0, font="Maths", y=412.0, index=1),
+        ))
+        roles = classify([*FILLER, mixed], layout_for([*FILLER, mixed]))
+        assert roles[-1] is Role.BODY
+
+    def test_a_stray_letter_between_two_equations_joins_them(self):
+        # A display equation set across several blocks leaves single letters behind,
+        # in the text face, carrying no signal of their own.
+        first = Paragraph((line("= 1/2 (3.5 + 7)", y=400.0),))
+        stray = Paragraph((line("r", y=412.0),))
+        second = Paragraph((line("= 2 x 4 - 8", y=424.0),))
+        pieces = [*FILLER, first, stray, second]
+        roles = classify(pieces, layout_for(pieces))
+        assert roles[-3:] == [Role.EQUATION, Role.EQUATION, Role.EQUATION]
+
+    def test_a_short_paragraph_between_two_paragraphs_is_left_alone(self):
+        pieces = [*FILLER, para("Body one.", y=400.0), para("Short.", y=412.0),
+                  para("Body two.", y=424.0)]
+        roles = classify(pieces, layout_for(pieces))
+        assert roles[-2] is Role.BODY

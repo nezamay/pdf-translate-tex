@@ -44,6 +44,15 @@ from translatex.workdir import work_dir
 
 progress = logging.getLogger("run")
 
+
+def report(line: str) -> None:
+    """One line of progress, on stdout, flushed.
+
+    Not through logging: logging goes to stderr, where a shell pipeline is free to sit on
+    it, and the whole point is that it arrives while the run is still going.
+    """
+    print(line, flush=True)
+
 #: Room around a display equation, so the ink is not shaved by rounding.
 EQUATION_PAD = 1.0
 
@@ -171,12 +180,26 @@ def run(source: Path, *, language: str = "ru", claude: str = "claude",
     record: list[dict] = []
     sent = 0
 
-    for index, (paragraph, role) in enumerate(zip(pieces, roles, strict=True)):
-        if not role.translatable or not paragraph.text.strip():
-            continue
-        if limit is not None and sent >= limit:
-            break
+    wanted = [
+        index
+        for index, (paragraph, role) in enumerate(zip(pieces, roles, strict=True))
+        if role.translatable and paragraph.text.strip()
+    ]
+    if limit is not None:
+        wanted = wanted[:limit]
+
+    for index in wanted:
+        paragraph, role = pieces[index], roles[index]
         masked = mask(paragraph, layout.body_fonts)
+        # Printed before the call, not after: a call takes seconds, and a tool that says
+        # nothing for seconds looks like a tool that has stopped. One terse line per
+        # paragraph — page, position, session, blocks into that session — so a watcher
+        # can see both that it is moving and where it has got to.
+        report(
+            f"p{paragraph.lines[0].page + 1} {sent + 1}/{len(wanted)} "
+            f"s{translator.session_index} {translator.session_blocks}/{translator.max_blocks} "
+            f"{role.value}"
+        )
         answer = translator.translate(masked)
         sent += 1
         rendered[index] = render_maths(

@@ -77,7 +77,7 @@ def translate(args: argparse.Namespace) -> int:
         print(f"arxiv path is not implemented yet: {args.source}", file=sys.stderr)
         return 2
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s:%(name)s:%(message)s")
     result = run(
         Path(args.source),
         language=args.lang,

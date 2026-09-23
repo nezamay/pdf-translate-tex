@@ -81,6 +81,18 @@ PROSE_LETTER_SHARE = 0.4
 #: because a caption and a footnote are text too and are set smaller.
 TEXT_FONT_COVERAGE = 0.9
 
+#: Above this share of characters in faces the body never uses, a paragraph is an
+#: expression however many letters it has. Measured on one paper: the stranded pieces of
+#: display equations sit at a median of 0.50 and real body paragraphs at 0.00, topping out
+#: at 0.09. Without it "¼ eat" and "e _pM ¼ evM" went to the translator as prose, came
+#: back unchanged because there was nothing to translate, and were set as text.
+MATHS_FONT_SHARE = 0.35
+
+#: A paragraph shorter than this, with an equation on either side, is part of it. The
+#: single letters a display equation leaves stranded — "r", "m", "e" — are set in the text
+#: face and carry no other signal at all.
+EQUATION_NEIGHBOUR_CHARS = 25
+
 #: A running head or folio is short; anything longer at the page edge is content.
 RUNNING_MAX_CHARS = 60
 
@@ -154,6 +166,16 @@ def _size(paragraph: Paragraph) -> float:
         round(c.size, 1) for line in paragraph.lines for c in line.chars if not c.text.isspace()
     )
     return sizes.most_common(1)[0][0] if sizes else 0.0
+
+
+def _foreign_share(paragraph: Paragraph, layout: Layout) -> float:
+    """The share of a paragraph set in faces the body never uses, or unreadable."""
+    chars = [c for line in paragraph.lines for c in line.chars if not c.text.isspace()]
+    if not chars:
+        return 0.0
+    return sum(
+        c.font not in layout.body_fonts or not c.readable for c in chars
+    ) / len(chars)
 
 
 def _letter_share(text: str) -> float:
@@ -249,7 +271,10 @@ def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
             roles.append(Role.CAPTION)
         elif FRONTMATTER.match(text) or AFFILIATION.search(text):
             roles.append(Role.FRONTMATTER)
-        elif _letter_share(text) < PROSE_LETTER_SHARE:
+        elif (
+            _letter_share(text) < PROSE_LETTER_SHARE
+            or _foreign_share(paragraph, layout) > MATHS_FONT_SHARE
+        ):
             roles.append(Role.EQUATION)
         elif page == first_page and layout.body_size < size < TITLE_RATIO * layout.body_size:
             roles.append(Role.AUTHORS)
@@ -257,7 +282,25 @@ def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
             roles.append(Role.HEADING)
         else:
             roles.append(Role.BODY)
-    return roles
+    return _adopt_strays(paragraphs, roles)
+
+
+def _adopt_strays(paragraphs: list[Paragraph], roles: list[Role]) -> list[Role]:
+    """Give a short paragraph between two equations to the equation around it.
+
+    A display equation set across several blocks leaves single letters stranded — "r",
+    "m", "e" — in the text face, carrying no signal of their own. Their company is the
+    only evidence there is, and it is good evidence: prose does not appear one letter at
+    a time between two equations.
+    """
+    out = list(roles)
+    for index in range(1, len(out) - 1):
+        if out[index] is not Role.BODY:
+            continue
+        if out[index - 1] is Role.EQUATION and out[index + 1] is Role.EQUATION:
+            if len(paragraphs[index].text.strip()) <= EQUATION_NEIGHBOUR_CHARS:
+                out[index] = Role.EQUATION
+    return out
 
 
 # A section number set as its own block: "I.", "B.", "3.2".
