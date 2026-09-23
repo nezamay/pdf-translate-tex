@@ -277,16 +277,11 @@ def equation_regions(
                max(b[2] for b in boxes), max(b[3] for b in boxes))
         band = _column_of(box, bands) or (page_rect.x0, page_rect.x1)
 
-        prose = [
-            line.bbox
-            for i, paragraph in enumerate(paragraphs)
-            if roles[i] in PROSE and paragraph.lines[0].page == page
-            for line in paragraph.lines
-            if _column_of(line.bbox, bands) == band
-        ]
-        top = max([b[3] for b in prose if b[3] <= box[1]], default=page_rect.y0)
-        bottom = min([b[1] for b in prose if b[1] >= box[3]], default=page_rect.y1)
-
+        # The equation's own extent, widened a little. Reaching out to the prose above
+        # and below instead swallowed the sentences the publisher sets among the blocks
+        # of a display — "where ipc = u0,v0 is the geometric centroid" — and printed them
+        # as a picture, in English, beside their own translation.
+        top, bottom = box[1] - EQUATION_PAD, box[3] + EQUATION_PAD
         ink = ink_box(doc, page, (band[0], top, band[1], bottom))
         if ink is not None:
             found[index] = Crop(
@@ -294,11 +289,18 @@ def equation_regions(
                 (ink[0] - EQUATION_PAD, ink[1] - EQUATION_PAD,
                  ink[2] + EQUATION_PAD, ink[3] + EQUATION_PAD),
             )
-            for i, paragraph in enumerate(paragraphs):
-                if i == index or paragraph.lines[0].page != page:
+            for i, other in enumerate(paragraphs):
+                if i == index or other.lines[0].page != page:
                     continue
-                first = paragraph.lines[0].bbox
-                if top <= first[1] and first[3] <= bottom and _column_of(first, bands) == band:
+                # The WHOLE paragraph has to be inside, not just its first line. An
+                # equation number sits on the equation's own line and the sentence that
+                # follows it begins on the next, and the two are one paragraph: judging
+                # by the first line alone swallowed "(3) where ipc = u0,v0 is the
+                # geometric centroid of the image" into the picture.
+                boxes = [line.bbox for line in other.lines]
+                whole = (min(b[0] for b in boxes), min(b[1] for b in boxes),
+                         max(b[2] for b in boxes), max(b[3] for b in boxes))
+                if top <= whole[1] and whole[3] <= bottom and _column_of(whole, bands) == band:
                     absorbed.add(i)
         index = run[-1] + 1
     return found, absorbed

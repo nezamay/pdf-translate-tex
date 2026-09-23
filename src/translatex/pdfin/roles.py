@@ -284,6 +284,12 @@ def classify(paragraphs: list[Paragraph], layout: Layout) -> list[Role]:
             roles.append(Role.CAPTION)
         elif FRONTMATTER.match(text) or AFFILIATION.search(text):
             roles.append(Role.FRONTMATTER)
+        elif _looks_like_heading(text, size, layout) and _letter_share(text) > PROSE_LETTER_SHARE:
+            # Before the maths tests, not after: a subsection head is set in a display
+            # face the body never uses, so the font share calls it an expression — and
+            # then the equation beside it swallows it whole and sets it as a picture,
+            # in English.
+            roles.append(Role.HEADING)
         elif (
             _letter_share(text) < PROSE_LETTER_SHARE
             or _foreign_share(paragraph, layout) > MATHS_FONT_SHARE
