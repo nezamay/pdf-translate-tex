@@ -67,3 +67,18 @@ class TestUnreadableRuns:
     def test_a_page_break_starts_a_new_run(self):
         runs = unreadable_runs([char(0, page=0), char(6, page=1)])
         assert [len(r) for r in runs] == [1, 1]
+
+
+class TestNamesWithoutASubsetPrefix:
+    def test_a_name_with_no_prefix_survives_whole(self):
+        # "AdvOT3c2d9f11+fb" carries a Unicode block but no subset prefix. Splitting on
+        # the first plus left "fb", so every ligature in the document was filed under a
+        # family the body never used, and read as maths.
+        assert bare_name("AdvOT3c2d9f11+fb") == "AdvOT3c2d9f11+fb"
+        assert family("AdvOT3c2d9f11+fb") == "AdvOT3c2d9f11"
+
+    def test_a_six_letter_prefix_is_still_removed(self):
+        assert bare_name("NEKBOG+AdvOT3c2d9f11+fb") == "AdvOT3c2d9f11+fb"
+
+    def test_a_plus_that_is_not_a_prefix_is_kept(self):
+        assert bare_name("Advent+Extra") == "Advent+Extra"

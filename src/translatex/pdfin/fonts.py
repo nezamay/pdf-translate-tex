@@ -19,9 +19,16 @@ _CUT_SUFFIX = re.compile(r"\.(BI|IB|B|I)$", re.IGNORECASE)
 _BLOCK_SUFFIX = re.compile(r"\+[0-9a-f]{2}$", re.IGNORECASE)
 
 
+#: A subset prefix is exactly six capitals and a plus, and nothing else is. Splitting on
+#: the first plus instead throws the name away whenever the prefix is absent:
+#: "AdvOT3c2d9f11+fb" became "fb", which is not a font, and every ligature in the document
+#: was then filed under a family the body never used.
+_SUBSET_PREFIX = re.compile(r"^[A-Z]{6}\+")
+
+
 def bare_name(name: str) -> str:
     """The font name without its six-letter subset prefix."""
-    return str(name).split("+", 1)[-1] if name else ""
+    return _SUBSET_PREFIX.sub("", str(name)) if name else ""
 
 
 def family(name: str) -> str:

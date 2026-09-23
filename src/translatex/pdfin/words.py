@@ -66,6 +66,26 @@ class Word:
         return all(c.bold for c in self.chars)
 
 
+def _spell(line: Line) -> tuple[str, list[Char | None]]:
+    """A line's text with its ligatures spelled out, and the character behind each letter.
+
+    A ligature is one mark standing for two letters, so both letters point back at it.
+    """
+    chars = list(line.chars)
+    while chars and chars[0].text.isspace():
+        chars.pop(0)
+    while chars and chars[-1].text.isspace():
+        chars.pop()
+
+    text = ""
+    owners: list[Char | None] = []
+    for char in chars:
+        spelled = spell_out(char.text)
+        text += spelled
+        owners += [char] * len(spelled)
+    return text, owners
+
+
 def split_words(line: Line) -> list[Word]:
     """The line's words, in order, with the spaces dropped."""
     words: list[Word] = []
@@ -179,21 +199,51 @@ class Paragraph:
     @property
     def text(self) -> str:
         """The paragraph as one string, with hyphenated line breaks healed."""
+        return self.flatten()[0]
+
+    def flatten(self) -> tuple[str, list[Char | None]]:
+        """The paragraph's text, and the character each position came from.
+
+        One place joins the lines, because anything reading the text and anything reading
+        the characters have to agree about where the words are. Built separately, they
+        did not: the joined text put a space at every line end and the raw run of
+        characters did not, so masking saw "multicoptersequipped".
+
+        A position with no character behind it — a space invented at a line break — is
+        None, and so is a hyphen the healing removed.
+        """
         out = ""
+        owners: list[Char | None] = []
+
         for line in self.lines:
-            piece = line.text.strip()
+            piece, piece_owners = _spell(line)
+            if not piece:
+                continue
+
             head = _LINE_END_HYPHEN.search(out)
             tail = _LINE_START_WORD.match(piece)
             if head and tail and piece[:1].islower():
                 joined = join_hyphenated(
                     head.group(1), tail.group(1), self.known_words, mark=out[head.end() - 1]
                 )
-                out = out[: head.start()] + joined + piece[tail.end() :]
-            elif out:
-                out = f"{out} {piece}"
-            else:
-                out = piece
-        return out
+                kept_mark = len(joined) > len(head.group(1)) + len(tail.group(1))
+                mark_owner = owners[head.end() - 1]
+                out = out[: head.start(1)] + joined + piece[tail.end() :]
+                owners = (
+                    owners[: head.start(1)]
+                    + owners[head.start(1) : head.end(1)]
+                    + ([mark_owner] if kept_mark else [])
+                    + piece_owners[: tail.end()]
+                    + piece_owners[tail.end() :]
+                )
+                continue
+
+            if out:
+                out += " "
+                owners.append(None)
+            out += piece
+            owners += piece_owners
+        return out, owners
 
     @property
     def words(self) -> list[Word]:
