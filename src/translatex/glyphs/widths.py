@@ -153,21 +153,36 @@ def decide(font_name: str, widths: dict[int, float]) -> FontVerdict:
     return FontVerdict(font_name, won, errors, overrides, _unexplained(widths, won))
 
 
+def _private(code: int) -> bool:
+    """Whether a code point can only be a private arrangement, never text.
+
+    A C0 control and a Private Use Area code point are both cases where the font has
+    stopped claiming to say anything in Unicode at all — bracket halves, radical parts,
+    stacked-fraction pieces. The test is per code and not per font: a Times face in the
+    corpus uses sixteen such codes among eighty-three, and condemning the whole font for
+    them would crop twenty thousand characters of ordinary body text.
+    """
+    return code < 0x20 or 0xE000 <= code <= 0xF8FF
+
+
 def _unexplained(widths: dict[int, float], reading: str) -> frozenset[int]:
     """Codes the winning reading leaves without a believable character.
 
-    Two kinds end up here: a code the reading simply does not cover, in a font that the
-    evidence says was lying anyway, and a code whose declared character is a C0 control,
-    which no amount of encoding makes into text. Neither needs identifying to be handled
-    — a fragment containing one is cropped rather than transcribed.
+    Two kinds end up here: a private arrangement, which no encoding makes into text, and
+    a code the winning reading does not cover in a font the evidence says was lying.
+    Neither needs identifying to be handled — a fragment containing one is reproduced as
+    a picture rather than transcribed.
+
+    What this cannot catch is a legitimate code point drawn as something else: the same
+    corpus has faces where '1/4' is an equals sign and 'thorn' a plus. Those are ordinary
+    Unicode characters with ordinary widths, so no evidence inside the font contradicts
+    them. Only the shape or the surrounding formula can, and neither is available here.
     """
-    out = set()
-    for code in widths:
-        if code < 0x20:
-            out.add(code)
-        elif reading != DECLARED and reading not in readings(code):
-            out.add(code)
-    return frozenset(out)
+    return frozenset(
+        code
+        for code in widths
+        if _private(code) or (reading != DECLARED and reading not in readings(code))
+    )
 
 
 def used_codes(doc: pymupdf.Document) -> dict[str, set[int]]:
