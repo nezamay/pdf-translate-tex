@@ -96,3 +96,32 @@ class TestFigureRegions:
         body = caption_at(340.0, "This is ordinary running text about the diagram.")
         found = figure_regions(page_with_a_drawing, list(body.lines), [body], [Role.BODY])
         assert found == {}
+
+
+@pytest.fixture
+def page_with_two_drawings(tmp_path):
+    """A full-measure drawing at the top and a column-wide one below it."""
+    doc = pymupdf.open()
+    page = doc.new_page(width=PAGE_WIDTH, height=800)
+    page.draw_rect(pymupdf.Rect(60, 60, 540, 150), color=(0, 0, 0), fill=(0, 0, 0))
+    page.draw_rect(pymupdf.Rect(330, 220, 540, 300), color=(0, 0, 0), fill=(0, 0, 0))
+    path = tmp_path / "two.pdf"
+    doc.save(path)
+    doc.close()
+    return pymupdf.open(path)
+
+
+def test_a_figure_does_not_swallow_the_one_above_it(page_with_two_drawings):
+    # The lower figure has no text overhead in its own column, because the upper one
+    # spans the whole measure. Without a rule that two figures cannot occupy the same
+    # ground, the search runs to the top of the sheet and takes its neighbour whole.
+    upper = Paragraph((line(LEFT[0], RIGHT[1], y=170.0, text="Fig. 1. The wide one."),))
+    lower = Paragraph((line(*RIGHT, y=320.0, text="Fig. 2. The narrow one."),))
+    lines = [*upper.lines, *lower.lines]
+
+    found = figure_regions(page_with_two_drawings, lines, [upper, lower],
+                           [Role.CAPTION, Role.CAPTION])
+
+    assert set(found) == {0, 1}
+    assert found[0].rect[3] <= 160.0
+    assert found[1].rect[1] >= 200.0
