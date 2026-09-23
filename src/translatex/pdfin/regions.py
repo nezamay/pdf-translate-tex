@@ -144,6 +144,44 @@ def figure_regions(
     return found
 
 
+#: Another line counts as sharing the equation's line when it overlaps the equation's
+#: span by this much of its own height. A mere touch does not: the descenders of the line
+#: above reach into the ascenders of the equation on nearly every display, and treating
+#: that as sharing threw away two thirds of the real equations.
+SHARE_A_LINE = 0.5
+
+
+def _shares_a_line_with(other: tuple[float, float, float, float],
+                        box: tuple[float, float, float, float]) -> bool:
+    overlap = min(other[3], box[3]) - max(other[1], box[1])
+    height = other[3] - other[1]
+    return height > 0 and overlap >= SHARE_A_LINE * height
+
+
+#: Words that only appear in prose. A region holding this many of them is showing a
+#: sentence, whatever the geometry concluded.
+FUNCTION_WORDS = re.compile(
+    r"\b(?:the|and|are|is|of|in|with|for|from|this|that|where|which|as|by|to|be|can|"
+    r"represents|denotes|shown|using|model|method|between|respectively)\b",
+    re.I,
+)
+PROSE_WORDS_ALLOWED = 2
+
+
+def _holds_a_sentence(doc: pymupdf.Document, page: int,
+                      rect: tuple[float, float, float, float]) -> bool:
+    """Whether a candidate region is showing prose rather than an equation.
+
+    The last word on the matter, and deliberately not a geometric one. Every rule above
+    reasons about boxes, and boxes are what the publisher chose; this reads what would
+    actually be in the picture. A display equation carries symbols and a number. A
+    sentence carries "the", "of", "is" — and if those are in there, the crop is a
+    sentence cut out of the page and set beside its own translation.
+    """
+    text = doc[page].get_text(clip=pymupdf.Rect(*rect)).replace("\n", " ")
+    return len(FUNCTION_WORDS.findall(text)) > PROSE_WORDS_ALLOWED
+
+
 def _with_images(
     doc: pymupdf.Document,
     page_number: int,
@@ -288,6 +326,15 @@ def equation_regions(
             for line in page_lines
             if id(line) not in mine and _column_of(line.bbox, bands) == band
         ]
+        # A run that shares a line with text is not a display equation at all — it is
+        # inline maths, and there is no way to crop it without cutting that line through
+        # the middle, which is exactly what the page showed: "camera modeled using the
+        # pinhole model" sliced in half and set as a picture. Leave it to be masked and
+        # set in the line where it belongs.
+        if any(_shares_a_line_with(b, box) for b in others):
+            index = run[-1] + 1
+            continue
+
         top = max(
             [box[1] - EQUATION_PAD]
             + [b[3] for b in others if b[3] <= box[1]]
@@ -298,11 +345,14 @@ def equation_regions(
         )
         ink = ink_box(doc, page, (band[0], top, band[1], bottom))
         if ink is not None:
-            found[index] = Crop(
-                f"eq_{index}", page,
-                (ink[0] - EQUATION_PAD, ink[1] - EQUATION_PAD,
-                 ink[2] + EQUATION_PAD, ink[3] + EQUATION_PAD),
-            )
+            rect = (ink[0] - EQUATION_PAD, ink[1] - EQUATION_PAD,
+                    ink[2] + EQUATION_PAD, ink[3] + EQUATION_PAD)
+            # Checked on the finished rectangle, not on the ink: the padding is what
+            # reaches back into the line above.
+            if _holds_a_sentence(doc, page, rect):
+                index = run[-1] + 1
+                continue
+            found[index] = Crop(f"eq_{index}", page, rect)
             for i, other in enumerate(paragraphs):
                 if i == index or other.lines[0].page != page:
                     continue
