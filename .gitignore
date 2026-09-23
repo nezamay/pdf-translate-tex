@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+.pytest_cache/
+.ruff_cache/
+
+# Per-paper working tree: intermediate .tex, crops and logs, all reproducible.
+.translatex/

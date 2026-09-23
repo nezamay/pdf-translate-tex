@@ -1,0 +1,32 @@
+[project]
+name = "pdf-translate-tex"
+version = "0.1.0"
+description = "Translate a scientific paper by rebuilding it in LaTeX instead of reflowing the original layout"
+requires-python = ">=3.12"
+dependencies = [
+    "pymupdf>=1.24",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# DocLayout-YOLO, the page-layout model. Everything it is wanted for here — columns,
+# figures, display-formula regions — has a geometric answer for two-column journal
+# papers, so it is not a base dependency: roughly 340 MB of wheels and weights should
+# be earned by a measurement showing the geometry misses something real.
+layout = [
+    "onnxruntime>=1.18",
+    "opencv-python-headless>=4.9",
+]
+
+[project.scripts]
+translatex = "translatex.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/translatex"]
+
+[tool.ruff]
+line-length = 100
