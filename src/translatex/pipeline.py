@@ -122,7 +122,7 @@ def run(source: Path, *, language: str = "ru", claude: str = "claude",
 
     doc = pymupdf.open(pdf)
     lines = read_lines(doc)
-    pieces = paragraphs(lines)
+    pieces = paragraphs(lines, doc[0].rect.width)
     layout = Layout.measure(lines)
     # Into the order a reader meets them before anything looks at what is next to what:
     # the order a PDF stores blocks in is not the order of the page.

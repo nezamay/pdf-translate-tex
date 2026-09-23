@@ -102,8 +102,9 @@ class TestStitch:
         # A line stretched to fill its measure has word gaps wide enough that pymupdf
         # calls each word a line. Left alone, each one then looks like an indent and
         # becomes a paragraph of its own.
-        row = [fragment("inappropriate", 41.8), fragment("guidance", 102.4),
-               fragment("strategies,", 146.3), fragment("and", 194.0)]
+        # Gaps of a few points, as a stretched line has; a gutter is much wider.
+        row = [fragment("inappropriate", 41.8), fragment("guidance", 112.0),
+               fragment("strategies,", 158.0), fragment("and", 219.0)]
         stitched = stitch(row, 600.0)
         assert len(stitched) == 1
         assert stitched[0].text == "inappropriate guidance strategies, and"

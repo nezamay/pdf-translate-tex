@@ -150,6 +150,11 @@ def read_lines(
 #: rather than by the typesetter. A column gutter is several times wider.
 FRAGMENT_GAP_EM = 3.0
 
+#: A fragment taller than this many median line heights stands on its own. A drop cap is
+#: three lines tall, and once it joined a row it stretched the row across all three, so
+#: every line it reached overlapped it by half of itself and the three became one.
+TALL_FRAGMENT = 1.8
+
 #: Two fragments overlapping vertically by at least this much of the shorter one are on
 #: the same line. Comparing the boxes' bottoms instead does not work: a fragment carrying
 #: a superscript or a tall bracket is raised, so "[n_ty n_tz]^T" and the words beside it
@@ -186,9 +191,23 @@ def stitch(lines: list[Line], page_width: float) -> list[Line]:
             [line.bbox for line in lines if line.page == page], page_width
         )
 
+    heights = sorted(line.bbox[3] - line.bbox[1] for line in lines)
+    ordinary = heights[len(heights) // 2] if heights else 0.0
+
     rows: list[list[Line]] = []
+    closed: list[bool] = []
     for line in sorted(lines, key=lambda line: (line.page, line.bbox[1])):
-        for row in reversed(rows):
+        # A tall fragment keeps its place in the order but takes no company: left in the
+        # running, every later line that reached it joined it, and a drop cap three lines
+        # tall pulled all three into one.
+        if ordinary and line.bbox[3] - line.bbox[1] > TALL_FRAGMENT * ordinary:
+            rows.append([line])
+            closed.append(True)
+            continue
+        for position in range(len(rows) - 1, -1, -1):
+            if closed[position]:
+                continue
+            row = rows[position]
             if (
                 row[0].page == line.page
                 and _shares_a_line(row, line)
@@ -199,6 +218,7 @@ def stitch(lines: list[Line], page_width: float) -> list[Line]:
                 break
         else:
             rows.append([line])
+            closed.append(False)
 
     out: list[Line] = []
     for group in rows:
@@ -224,13 +244,18 @@ def _shares_a_line(row: list[Line], line: Line) -> bool:
     return shorter > 0 and overlap >= LINE_OVERLAP * shorter
 
 
+#: A gap smaller than this share of the body size is not a space. A drop cap sits hard
+#: against the word it begins, and putting one in gave "T HE presence".
+SPACE_GAP_EM = 0.15
+
+
 def _merge(group: list[Line]) -> Line:
     """One line from fragments of it, with a space wherever a gap was."""
     if len(group) == 1:
         return group[0]
     chars: list[Char] = []
     for index, line in enumerate(group):
-        if index:
+        if index and line.bbox[0] - chars[-1].bbox[2] > SPACE_GAP_EM * chars[-1].size:
             previous = chars[-1]
             chars.append(
                 Char(

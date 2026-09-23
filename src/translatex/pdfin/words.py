@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from translatex.pdfin.chars import Char
 from translatex.pdfin.chars import Line
 from translatex.pdfin.chars import spell_out
+from translatex.pdfin.layout import column_of
+from translatex.pdfin.layout import columns
 
 #: A line whose left edge sits this much further right than its neighbours starts a
 #: paragraph. Measured in fractions of the body size, so it survives a change of scale.
@@ -259,9 +261,17 @@ def _body_size(lines: list[Line]) -> float:
     return max(sizes) if sizes else 10.0
 
 
-def _starts_paragraph(previous: Line, line: Line, right_edge: float) -> bool:
-    """Whether `line` opens a new paragraph rather than continuing `previous`."""
-    if line.page != previous.page or line.block != previous.block:
+def _starts_paragraph(previous: Line, line: Line, right_edge: float,
+                      column: tuple[float, float] | None,
+                      previous_column: tuple[float, float] | None) -> bool:
+    """Whether `line` opens a new paragraph rather than continuing `previous`.
+
+    The column decides, not the publisher's block. A block is the publisher's own
+    division: it cuts across lines as readily as along them, and once lines are stitched
+    back together the block a stitched line carries is whichever fragment came first.
+    Keying on it then started a new paragraph at almost every line.
+    """
+    if line.page != previous.page or column != previous_column:
         return True
 
     # A word broken across the break has not finished, so nothing geometric can end the
@@ -281,25 +291,49 @@ def _starts_paragraph(previous: Line, line: Line, right_edge: float) -> bool:
     return right_edge - prev_box[2] > SHORT_LINE_EM * size
 
 
-def paragraphs(lines: list[Line]) -> list[Paragraph]:
-    """Group lines into paragraphs, one publisher block at a time."""
+def paragraphs(lines: list[Line], page_width: float = 0.0) -> list[Paragraph]:
+    """Group lines into paragraphs, one column at a time."""
     if not lines:
         return []
 
     known = vocabulary(lines)
 
-    # The column edge is the widest line of the block, not of the page: measuring against
-    # the page would make every line of a two-column layout look like the end of a
-    # paragraph. Collected once, because a paper runs to a few thousand lines.
-    right_edges: dict[tuple[int, int], float] = {}
-    for line in lines:
-        key = (line.page, line.block)
-        right_edges[key] = max(right_edges.get(key, 0.0), line.bbox[2])
+    bands: dict[int, list[tuple[float, float]]] = {}
+    for page in {line.page for line in lines}:
+        boxes = [line.bbox for line in lines if line.page == page]
+        bands[page] = columns(boxes, page_width or max(box[2] for box in boxes) * 1.08)
+
+    of_line = {
+        id(line): column_of(line.bbox, bands[line.page]) for line in lines
+    }
+
+    # Into the order a reader meets them, before anything asks what follows what. The
+    # order a PDF stores its lines in jumps between the columns constantly: left in file
+    # order, "this line is in another column" fired 713 times on an eleven-page paper
+    # with two columns, and every one of them started a paragraph.
+    lines = sorted(
+        lines,
+        key=lambda line: (line.page, (of_line[id(line)] or (line.bbox[0], 0.0))[0],
+                          line.bbox[1]),
+    )
+
+    # The column's own right edge, from the band. Taking the widest line in the column
+    # instead let one full-measure line — a title, a spanning caption — stand in for the
+    # measure: on the opening page it put the edge 262 points beyond where the text
+    # actually ends, so every line of the abstract looked short and became a paragraph.
+    def right_edge(line: Line) -> float:
+        band = of_line[id(line)]
+        if band is not None:
+            return band[1]
+        page_lines = [x.bbox[2] for x in lines if x.page == line.page]
+        return max(page_lines) if page_lines else line.bbox[2]
 
     out: list[Paragraph] = []
     current: list[Line] = [lines[0]]
     for previous, line in zip(lines, lines[1:], strict=False):
-        if _starts_paragraph(previous, line, right_edges[(line.page, line.block)]):
+        column = of_line[id(line)]
+        if _starts_paragraph(previous, line, right_edge(line),
+                             column, of_line[id(previous)]):
             out.append(Paragraph(tuple(current), known))
             current = [line]
         else:

@@ -324,6 +324,14 @@ BARE_NUMBER = re.compile(r"^(?:[IVXLC]+|[A-Z]|\d+(?:\.\d+)*)\.?$")
 DROP_CAP = re.compile(r"\s([A-Z])$")
 
 
+def _is_initial(paragraph: Paragraph) -> bool:
+    """Whether a paragraph is nothing but one oversized capital — a drop cap."""
+    if len(paragraph.lines) != 1:
+        return False
+    chars = [c for c in paragraph.lines[0].chars if not c.text.isspace()]
+    return len(chars) == 1 and chars[0].text.isalpha() and chars[0].text.isupper()
+
+
 def _joined(first: Paragraph, second: Paragraph) -> Paragraph:
     return Paragraph(first.lines + second.lines, first.known_words or second.known_words)
 
@@ -400,6 +408,20 @@ def merge(paragraphs: list[Paragraph], roles: list[Role]) -> tuple[list[Paragrap
             continue
         if same_page and previous_role is Role.CAPTION and role is Role.BODY:
             out_paragraphs[-1] = _joined(previous, paragraph)
+            continue
+        if role is Role.BODY and _is_initial(previous):
+            # A drop cap stands alone: it is one letter, several times the body size, and
+            # once the lines are stitched it is a paragraph of its own — classified by
+            # its size as a title when it happens to fall on the opening page. Whatever
+            # it was called, it belongs to the word beside it.
+            out_paragraphs[-1] = Paragraph(
+                (Line((*previous.lines[0].chars, *paragraph.lines[0].chars),
+                      paragraph.lines[0].page, paragraph.lines[0].block,
+                      paragraph.lines[0].index),
+                 *paragraph.lines[1:]),
+                paragraph.known_words,
+            )
+            out_roles[-1] = role
             continue
         if previous_role is Role.HEADING and role is Role.BODY:
             moved = _take_drop_cap(previous, paragraph)

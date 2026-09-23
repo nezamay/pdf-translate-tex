@@ -68,9 +68,20 @@ class TestParagraphs:
         assert len(result) == 1
         assert result[0].text == "first line here second line here"
 
-    def test_a_new_block_starts_a_paragraph(self):
-        lines = [line("first", y=100, block=0), line("second", y=112, block=1)]
-        assert len(paragraphs(lines)) == 2
+    def test_the_other_column_starts_a_paragraph(self):
+        # The column decides, not the publisher's block: a block cuts across lines as
+        # readily as along them, and a stitched line carries whichever block its first
+        # fragment came from.
+        lines = [
+            *(line("a" * 40, x0=50.0, y=100.0 + 12 * i, index=i) for i in range(10)),
+            *(line("b" * 40, x0=320.0, y=100.0 + 12 * i, index=i) for i in range(10)),
+        ]
+        assert len(paragraphs(lines, 600.0)) == 2
+
+    def test_a_block_boundary_alone_does_not_split_a_paragraph(self):
+        lines = [line("first line here", y=100, block=0, index=0),
+                 line("second line here", y=112, block=7, index=1)]
+        assert len(paragraphs(lines, 600.0)) == 1
 
     def test_a_wide_vertical_gap_starts_a_paragraph(self):
         lines = [line("first", y=100, index=0), line("second", y=160, index=1)]
