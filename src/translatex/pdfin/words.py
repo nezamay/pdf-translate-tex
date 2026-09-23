@@ -30,6 +30,12 @@ LEADING_EM = 1.8
 #: text only leaves that much white at the end of something.
 SHORT_LINE_EM = 2.0
 
+#: An equation number set on a line of its own. It belongs to the equation beside it, not
+#: to the sentence under it: grouped with the sentence, its line sits on the equation's
+#: own line, and the equation then decides it is sharing a line with prose and refuses to
+#: be cropped at all.
+EQUATION_NUMBER_LINE = re.compile(r"^\(\d+[a-z]?\)$")
+
 
 @dataclass(frozen=True)
 class Word:
@@ -272,6 +278,10 @@ def _starts_paragraph(previous: Line, line: Line, right_edge: float,
     Keying on it then started a new paragraph at almost every line.
     """
     if line.page != previous.page or column != previous_column:
+        return True
+
+    if (EQUATION_NUMBER_LINE.match(previous.text.strip())
+            or EQUATION_NUMBER_LINE.match(line.text.strip())):
         return True
 
     # A word broken across the break has not finished, so nothing geometric can end the

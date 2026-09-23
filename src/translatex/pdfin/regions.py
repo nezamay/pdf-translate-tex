@@ -320,10 +320,16 @@ def equation_regions(
         # prose above and below instead swallowed the sentences the publisher sets among
         # the blocks of a display; widening blindly clipped the neighbouring line in half
         # and printed the half inside the crop.
+        # Only prose can be cut by a crop. Counting every other line made the rows of one
+        # display equation cut each other, and equations (1), (3) and (5) came out as
+        # text: a run covers the blocks that happened to be consecutive, and its own
+        # remaining rows then looked like neighbours to keep clear of.
         mine = {id(line) for i in run for line in paragraphs[i].lines}
         others = [
             line.bbox
-            for line in page_lines
+            for i, other in enumerate(paragraphs)
+            if roles[i] in PROSE and other.lines[0].page == page
+            for line in other.lines
             if id(line) not in mine and _column_of(line.bbox, bands) == band
         ]
         # A run that shares a line with text is not a display equation at all — it is
