@@ -19,6 +19,8 @@ import pymupdf
 
 from translatex.glyphs import decide_fonts
 from translatex.glyphs.widths import FontVerdict
+from translatex.pdfin.layout import column_of
+from translatex.pdfin.layout import columns
 from translatex.pdfin.fonts import bare_name
 from translatex.pdfin.fonts import family
 from translatex.pdfin.fonts import style_from_name
@@ -141,18 +143,21 @@ def read_lines(
                         )
                 if chars:
                     out.append(Line(tuple(chars), page.number, block_no, line_no))
-    return stitch(out)
+    return stitch(out, doc[0].rect.width if len(doc) else 0.0)
 
 
 #: Two fragments this close, measured in body sizes, are one line broken by the reader
 #: rather than by the typesetter. A column gutter is several times wider.
 FRAGMENT_GAP_EM = 3.0
 
-#: Baselines within this many points are the same baseline.
-BASELINE_TOLERANCE = 1.5
+#: Two fragments overlapping vertically by at least this much of the shorter one are on
+#: the same line. Comparing the boxes' bottoms instead does not work: a fragment carrying
+#: a superscript or a tall bracket is raised, so "[n_ty n_tz]^T" and the words beside it
+#: differ by nine points though they are one line of one sentence.
+LINE_OVERLAP = 0.5
 
 
-def stitch(lines: list[Line]) -> list[Line]:
+def stitch(lines: list[Line], page_width: float) -> list[Line]:
     """Put back together the lines pymupdf cut at a wide word gap.
 
     A justified line stretched to fill its measure has word gaps wide enough that pymupdf
@@ -162,22 +167,42 @@ def stitch(lines: list[Line]) -> list[Line]:
     paragraph, because each one starts further right than the last and that is what an
     indent looks like.
 
-    Fragments join when they share a page, a block and a baseline, and sit within a few
-    body sizes of each other — the last condition is what keeps the two columns apart,
-    since a gutter is several times wider than any word gap.
+    Fragments join when they share a page and a baseline and sit within a few body sizes
+    of each other. The block they were filed under is deliberately not part of that: a
+    block is the publisher's own division and it cuts across lines as readily as along
+    them. "The LOS vector direction nt = ntx" and "nty ntz]T, which con-" are one line of
+    one sentence, filed as two blocks because the subscripts ride higher, and keeping
+    them apart made the second half look like a display equation standing on its own.
+
+    The horizontal condition is what keeps the two columns apart, since a gutter is
+    several times wider than any word gap.
     """
-    by_row: dict[tuple[int, int, int], list[Line]] = {}
-    order: list[tuple[int, int, int]] = []
-    for line in lines:
-        key = (line.page, line.block, round(line.bbox[3] / BASELINE_TOLERANCE))
-        if key not in by_row:
-            by_row[key] = []
-            order.append(key)
-        by_row[key].append(line)
+    # The columns have to be known here. A gutter can be narrower than a stretched word
+    # gap — twelve points against a threshold of thirty on one paper — so a purely
+    # horizontal test joins the two columns of a page into single lines.
+    bands: dict[int, list[tuple[float, float]]] = {}
+    for page in {line.page for line in lines}:
+        bands[page] = columns(
+            [line.bbox for line in lines if line.page == page], page_width
+        )
+
+    rows: list[list[Line]] = []
+    for line in sorted(lines, key=lambda line: (line.page, line.bbox[1])):
+        for row in reversed(rows):
+            if (
+                row[0].page == line.page
+                and _shares_a_line(row, line)
+                and column_of(row[0].bbox, bands[line.page])
+                == column_of(line.bbox, bands[line.page])
+            ):
+                row.append(line)
+                break
+        else:
+            rows.append([line])
 
     out: list[Line] = []
-    for key in order:
-        row = sorted(by_row[key], key=lambda line: line.bbox[0])
+    for group in rows:
+        row = sorted(group, key=lambda line: line.bbox[0])
         group = [row[0]]
         for line in row[1:]:
             size = max(c.size for c in group[-1].chars) or 10.0
@@ -188,6 +213,15 @@ def stitch(lines: list[Line]) -> list[Line]:
                 group = [line]
         out.append(_merge(group))
     return out
+
+
+def _shares_a_line(row: list[Line], line: Line) -> bool:
+    """Whether `line` sits on the same line of type as the fragments already in `row`."""
+    top = min(existing.bbox[1] for existing in row)
+    bottom = max(existing.bbox[3] for existing in row)
+    overlap = min(bottom, line.bbox[3]) - max(top, line.bbox[1])
+    shorter = min(bottom - top, line.bbox[3] - line.bbox[1])
+    return shorter > 0 and overlap >= LINE_OVERLAP * shorter
 
 
 def _merge(group: list[Line]) -> Line:

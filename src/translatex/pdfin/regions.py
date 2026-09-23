@@ -20,15 +20,10 @@ import pymupdf
 from translatex.pdfin.chars import Line
 from translatex.pdfin.crops import Crop
 from translatex.pdfin.crops import ink_box
+from translatex.pdfin.layout import column_of as _column_of
+from translatex.pdfin.layout import columns as _bands
 from translatex.pdfin.roles import Role
 from translatex.pdfin.words import Paragraph
-
-#: A position carrying fewer than this share of what a column typically carries is in a
-#: gutter. Measured against the median rather than the maximum: see `columns`.
-GUTTER_DEPTH = 0.5
-
-#: A band narrower than this share of the page is a sidebar or a stamp, not a column.
-MIN_COLUMN_SHARE = 0.1
 
 #: A figure has to be at least this tall to be one; anything less is a rule or a stray
 #: mark left between two paragraphs.
@@ -49,51 +44,8 @@ CAPTION_ABOVE = re.compile(r"^\s*table\b", re.I)
 
 
 def columns(lines: list[Line], page_width: float) -> list[tuple[float, float]]:
-    """The horizontal bands the text of one page occupies, left to right.
-
-    Found from how MANY lines cover each position, not from whether any does. A single
-    full-width line — a spanning caption, a wide equation, a footer rule — bridges the
-    gutter, and a rule that cuts wherever coverage reaches zero then reports one column
-    across the whole page. Counting instead, the gutter stays a valley: a hundred lines
-    stop at it and one crosses.
-    """
-    if not lines or page_width <= 0:
-        return []
-
-    width = int(page_width) + 1
-    cover = [0] * width
-    for line in lines:
-        left = max(0, int(line.bbox[0]))
-        right = min(width, int(line.bbox[2]) + 1)
-        for x in range(left, right):
-            cover[x] += 1
-
-    covered = sorted(value for value in cover if value)
-    if not covered:
-        return []
-    # Against the typical column, not against the busiest position. A page whose title
-    # and abstract run the full measure has eight lines crossing the gutter, which cleared
-    # a threshold set at a fraction of the maximum by a hair — and the whole opening page
-    # came out as one column. The gutter is a valley beside the columns either side of it,
-    # so the reference is what a column normally carries.
-    typical = covered[len(covered) // 2]
-    threshold = GUTTER_DEPTH * typical
-
-    bands: list[tuple[float, float]] = []
-    start = None
-    for x in range(width):
-        if cover[x] > threshold:
-            if start is None:
-                start = x
-        elif start is not None:
-            bands.append((float(start), float(x)))
-            start = None
-    if start is not None:
-        bands.append((float(start), float(width)))
-
-    # Sidebars and rotated stamps leave slivers that are not columns of anything.
-    smallest = MIN_COLUMN_SHARE * page_width
-    return [band for band in bands if band[1] - band[0] >= smallest]
+    """The columns of a page, from its lines."""
+    return _bands([line.bbox for line in lines], page_width)
 
 
 def reading_order(
@@ -120,17 +72,6 @@ def reading_order(
         return (page, band[0] if band else box[0], box[1])
 
     return sorted(paragraphs, key=where)
-
-
-def _column_of(box: tuple[float, float, float, float],
-               bands: list[tuple[float, float]]) -> tuple[float, float] | None:
-    """The band a box sits in, by the largest overlap."""
-    best, overlap = None, 0.0
-    for band in bands:
-        shared = min(box[2], band[1]) - max(box[0], band[0])
-        if shared > overlap:
-            best, overlap = band, shared
-    return best
 
 
 def figure_regions(

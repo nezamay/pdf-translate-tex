@@ -104,7 +104,7 @@ class TestStitch:
         # becomes a paragraph of its own.
         row = [fragment("inappropriate", 41.8), fragment("guidance", 102.4),
                fragment("strategies,", 146.3), fragment("and", 194.0)]
-        stitched = stitch(row)
+        stitched = stitch(row, 600.0)
         assert len(stitched) == 1
         assert stitched[0].text == "inappropriate guidance strategies, and"
 
@@ -112,12 +112,12 @@ class TestStitch:
         # A gutter is several times wider than any word gap, which is what keeps the
         # two columns of a journal page apart.
         row = [fragment("left column text", 41.8), fragment("right column text", 305.0)]
-        assert len(stitch(row)) == 2
+        assert len(stitch(row, 600.0)) == 2
 
     def test_different_baselines_stay_different_lines(self):
         rows = [fragment("first", 41.8, y=100.0), fragment("second", 41.8, y=112.0)]
-        assert len(stitch(rows)) == 2
+        assert len(stitch(rows, 600.0)) == 2
 
     def test_a_line_that_was_never_cut_is_returned_as_it_was(self):
         only = fragment("a whole line of text", 41.8)
-        assert stitch([only]) == [only]
+        assert stitch([only], 600.0) == [only]
